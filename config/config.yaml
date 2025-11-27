@@ -1,0 +1,84 @@
+# Manriix Photo Capture System - [Manriix VA Sub System]
+
+system:
+  name: "manriix_photo_capture_va"
+  version: "1.0.0"
+  environment: "development"  # development, testing, production
+  debug: true
+
+# Vision Pipeline Configuration
+vision:
+  # YOLO11-pose Detection
+  yolo:
+    model_path: "models/yolo11n-pose.engine"
+    confidence_threshold: 0.6
+    iou_threshold: 0.45
+    max_detections: 8
+    input_size: [640, 640]
+    device: 0  # GPU ID
+    
+  # MediaPipe Face Analysis
+  mediapipe:
+    face_mesh:
+      max_num_faces: 4
+      refine_landmarks: true
+      min_detection_confidence: 0.6
+      min_tracking_confidence: 0.5
+      static_image_mode: false
+    
+    face_detection:
+      model_selection: 0  # 0=close-range, 1=full-range
+      min_detection_confidence: 0.6
+  
+  # Canon Camera Frame Client
+  canon:
+    host: "127.0.0.1"
+    port: 8089
+    timeout: 5.0
+    frame_queue_size: 5
+    reconnect_attempts: 3
+    reconnect_delay: 2.0
+    
+  # RealSense Depth Processing
+  realsense:
+    depth_topic: "/camera/aligned_depth_to_color/image_raw"
+    camera_info_topic: "/camera/aligned_depth_to_color/camera_info"
+    depth_range:
+      min: 0.4  # meters
+      max: 8.0  # meters
+    roi_percentage: 0.4  # roi - region of intrest -  Center 40% of bbox for depth extraction
+    outlier_rejection_sigma: 2.0
+    min_valid_pixels_ratio: 0.5
+
+# Performance Configuration
+performance:
+  target_fps: 30
+  processing_timeout: 0.1  # seconds
+  max_cpu_usage: 80  # percentage
+  max_gpu_usage: 85  # percentage
+  max_memory_usage: 12  # GB
+
+# Logging Configuration
+logging:
+  level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+  format: "structured"  # structured, simple
+  file_path: "logs/manriix_photo_va.log"
+  max_file_size_mb: 100
+  backup_count: 5
+  console_output: true
+  
+# Threading Configuration
+threading:
+  max_workers: 4
+  thread_timeout: 30.0
+  use_async: true
+
+# Testing Configuration
+testing:
+  test_image_path: "tests/test_data/test_image.jpg"
+  test_depth_path: "tests/test_data/test_depth.png"
+  mock_canon_server: true
+  performance_benchmarks:
+    yolo_inference_ms: 15
+    face_analysis_ms: 10
+    depth_processing_ms: 5

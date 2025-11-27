@@ -1,0 +1,99 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual Environments
+.venv/
+venv/
+ENV/
+env/
+
+# uv
+.uv/
+uv.lock
+
+# ROS2
+install/
+log/
+build/
+*.swp
+*.swo
+*~
+
+# IDE
+.vscode/
+.idea/
+*.code-workspace
+.vs/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Models (large files)
+models/*.pt
+models/*.onnx
+models/*.engine
+models/*.trt
+!models/.gitkeep
+
+# Keep model config
+!models/*.yaml
+!models/*.json
+
+# Logs
+logs/*.log
+logs/*.txt
+*.log
+
+# Test artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.hypothesis/
+
+# Data
+test_data/
+*.bag
+*.db3
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+.DS_Store
+Thumbs.db
+
+# Performance profiling
+*.prof
+*.lprof
+
+# System
+.cache/
+
+# Documentation builds
+docs/_build/
+docs/_static/
+docs/_templates/
+
+# Credentials (just in case)
+*.pem
+*.key
+secrets.yaml
+credentials.json
+
+# Benchmark results
+benchmark_results/
+*.png
+*.jpg
+*.jpeg
+!tests/test_data/*.jpg
+!tests/test_data/*.png
