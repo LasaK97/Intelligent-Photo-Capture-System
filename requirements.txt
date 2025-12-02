@@ -1,0 +1,102 @@
+# Manriix Photo Capture System - Requirements
+# Optimized for NVIDIA Jetson AGX Orin with JetPack 6.2.1
+# Python 3.10.12
+
+# ============================================
+# SYSTEM PACKAGES (DO NOT INSTALL VIA PIP)
+# ============================================
+# opencv-python         # Using system OpenCV 4.10.0 with CUDA
+# pyrealsense2          # Using system RealSense SDK
+# torch                 # Install separately from NVIDIA (see below)
+# tensorrt              # Using system TensorRT 10.3.0.30
+
+# ============================================
+# CORE DEPENDENCIES
+# ============================================
+
+# Configuration & Settings
+pydantic>=2.5.0,<3.0.0
+pydantic-settings>=2.1.0,<3.0.0
+PyYAML>=6.0.1
+
+# YOLO11 Detection
+ultralytics>=8.0.0
+
+# MediaPipe Face Analysis
+mediapipe>=0.10.0
+
+# Data Processing
+numpy>=1.24.0,<2.0.0
+pillow>=10.0.0
+
+# Async/Threading
+aiofiles>=23.0.0
+
+# ============================================
+# ROS2 INTEGRATION (if needed)
+# ============================================
+# These are typically installed via rosdep, but listed for reference
+# rclpy              # Installed via ROS2 Humble
+# sensor-msgs        # Installed via ROS2 Humble
+# cv-bridge          # Installed via ROS2 Humble
+
+# ============================================
+# TESTING & DEVELOPMENT
+# ============================================
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+
+# Performance Monitoring
+psutil>=5.9.0
+
+# Logging
+colorlog>=6.7.0
+structlog>=23.1.0
+
+# ============================================
+# OPTIONAL: Development Tools
+# ============================================
+# black>=23.0.0       # Code formatting
+# flake8>=6.0.0       # Linting
+# mypy>=1.5.0         # Type checking
+# ipython>=8.12.0     # Interactive shell
+
+# ============================================
+# JETSON-SPECIFIC INSTALLATION NOTES
+# ============================================
+#
+# 1. PyTorch for Jetson:
+#    Install from NVIDIA's pre-built wheels:
+#    https://forums.developer.nvidia.com/t/pytorch-for-jetson/72048
+#
+#    For JetPack 6.2.1:
+#    wget https://developer.download.nvidia.com/compute/redist/jp/v61/pytorch/torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl
+#    pip install torch-2.5.0a0+872d972e41.nv24.08.17622132-cp310-cp310-linux_aarch64.whl
+#
+# 2. Verify OpenCV CUDA:
+#    python3 -c "import cv2; print(cv2.cuda.getCudaEnabledDeviceCount())"
+#
+# 3. Verify TensorRT:
+#    python3 -c "import tensorrt; print(tensorrt.__version__)"
+#
+# 4. Install this requirements file:
+#    uv pip install -r requirements.txt
+#
+# ============================================
+
+#   Remove OpenCV installed with ultralytics - NO OpenCV CUDA
+# Remove all opencv from venv
+# rm -rf .venv/lib/python3.10/site-packages/cv2
+# rm -rf .venv/lib/python3.10/site-packages/opencv_contrib_python*
+# rm -rf .venv/lib/python3.10/site-packages/opencv_python*
+
+# Verify they're gone
+# ls .venv/lib/python3.10/site-packages/ | grep -i opencv
+# ls .venv/lib/python3.10/site-packages/ | grep -i cv2
+# Should show nothing
+
+# Test - should now use system OpenCV
+# python3 -c "import cv2; print(f'OpenCV: {cv2.__version__}, CUDA: {cv2.cuda.getCudaEnabledDeviceCount() > 0}')"
+# python3 -c "import cv2; print(cv2.__file__)"
