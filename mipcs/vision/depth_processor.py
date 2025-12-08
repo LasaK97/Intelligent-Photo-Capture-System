@@ -129,7 +129,7 @@ class DepthProcessor:
         self.node = node
 
         #camera calibration
-        self.intrinsics = Optional[CameraIntrinsics] = None
+        self.intrinsics: Optional[CameraIntrinsics] = None
         self.intrinsics_received = False
 
         #current depth data
@@ -426,7 +426,7 @@ class DepthProcessor:
             return []
 
         tasks = [
-            self.extract_person_depth(bbox, depth_image) for bbox in bboxes
+             await self.extract_person_depth(bbox, depth_image) for bbox in bboxes
         ]
 
         #extract all extractions concurrently
