@@ -177,7 +177,7 @@ class MediaPipeFaceAnalyzer:
             )
 
             analysis_time = time.perf_counter() - start_time
-            self._update_performance_metrics(analysis_time)
+            self._update_performance_metrices(analysis_time)
 
             if analysis:
                 logger.debug(

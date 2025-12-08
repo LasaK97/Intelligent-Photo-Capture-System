@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Union
 from datetime import datetime
 import structlog
-from spacy.training import console_logger
+
 from structlog.types import FilteringBoundLogger
 
 from config import settings
