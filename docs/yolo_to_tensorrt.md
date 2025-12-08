@@ -1,7 +1,7 @@
 # YOLO to TensorRT Conversion Guide
 
-**Author:** Lasantha Kulasooriya
-**Date:** December 8, 2024
+- **Author:** Lasantha Kulasooriya
+- **Date:** December 8, 2024
 
 Convert YOLO models to optimized TensorRT engines for NVIDIA Jetson deployment.
 
