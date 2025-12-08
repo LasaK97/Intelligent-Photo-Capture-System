@@ -5,6 +5,43 @@ from pydantic import BaseModel, Field, field_validator, model_validator, ConfigD
 from pydantic_settings import BaseSettings
 import yaml
 
+class ModelSource(BaseModel):
+    """Yolo download and conversion settings"""
+    base_model: str = Field(..., description="Base YOLO model name")
+    download_url: Optional[str] = Field(default=None, description="Custom download URL (Auto generated if None")
+    pt_model_path: str = Field(... , description="Path to the pytorch model file")
+    model_urls: Dict[str, str] = Field(
+        default={
+            "8": "https://github.com/ultralytics/assets/releases/download/v8.3.0/",
+            "v8": "https://github.com/ultralytics/assets/releases/download/v8.3.0/",
+            "9": "https://github.com/ultralytics/assets/releases/download/v8.2.0/",
+            "v9": "https://github.com/ultralytics/assets/releases/download/v8.2.0/",
+            "10": "https://github.com/ultralytics/assets/releases/download/v8.2.0/",
+            "v10": "https://github.com/ultralytics/assets/releases/download/v8.2.0/",
+            "11": "https://github.com/ultralytics/assets/releases/download/v8.3.0/",
+            "v11": "https://github.com/ultralytics/assets/releases/download/v8.3.0/",
+        },
+        description="YOLO model download URLs by version"
+    )
+
+    @field_validator("base_model")
+    @classmethod
+    def validate_base_model(cls, v: str) -> str:
+        """Validate base model"""
+        import re
+        pattern = r'^yolo(v)?(\d{1,2})(n|s|m|l|x)-(pose|seg|detect|obb|cls)$'
+        if not re.match(pattern, v.lower()):
+            raise ValueError(f"Invalid base YOLO model name: {v}")
+        return v.lower()
+
+
+class TensorRTEngineSettings(BaseModel):
+    """TensorRT engine settings"""
+    precision: Literal["FP16", "FP32", "INT8"] = Field(default="FP16", description="TensorRT precision mode")
+    batch_size: int = Field(default=1, ge=1, le=32,  description="Batch size for inference")
+    workspace_size: int = Field(default=4, ge=1, le=16, description="TensorRT workspace size in GB")
+
+
 class YOLOConfig(BaseModel):
     """Yolo-pose configs"""
 
@@ -14,6 +51,8 @@ class YOLOConfig(BaseModel):
     max_detections: int = Field(8, ge=1, le=20, description="Max number of detections")
     input_size: Tuple[int, int] = Field((640, 640), description="Input image size")
     device: int = Field(0, ge=0, le=1, description="Device index [GPU/ CPU]")
+    tensorrt_engine_settings: TensorRTEngineSettings = Field(default_factory=TensorRTEngineSettings, description="TensorRT engine settings")
+    model_source: ModelSource = Field(..., description="Model source download and conversion settings")
 
     @field_validator('model_path')
     @classmethod
@@ -21,6 +60,11 @@ class YOLOConfig(BaseModel):
         if not Path(v).suffix == '.engine':
             raise ValueError(f'Invalid model-[Model must be a TensorRT engine]: {v}')
         return v
+
+    @model_validator(mode='after')
+    def validate_input_sizes_match(self) -> 'YOLOConfig':
+        """validates input sizes match between inference and engine settings"""
+        return self  #both should use the same inpute size
 
 
 class FaceMeshConfig(BaseModel):
