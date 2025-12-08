@@ -16,6 +16,27 @@ vision:
     max_detections: 8
     input_size: [640, 640]
     device: 0  # GPU ID
+
+    #TensorRT Engine
+    tensorrt_engine_settings:
+      precision: "FP16" # FP16, FP32, INT8
+      batch_size: 1
+      workspace_size: 4  #GB - TensorRT workspace memory
+
+    #model download source
+    model_source:
+      base_model:  "yolo11n-pose"  # yolo11n-pose, yolo11s-pose, yolov8n-pose
+      download_url: null
+      pt_model_path: "models/yolo11n-pose.pt"   #pytorch model path
+      model_urls:
+        "8": "https://github.com/ultralytics/assets/releases/download/v8.3.0/"
+        "v8": "https://github.com/ultralytics/assets/releases/download/v8.3.0/"
+        "9": "https://github.com/ultralytics/assets/releases/download/v8.2.0/"
+        "v9": "https://github.com/ultralytics/assets/releases/download/v8.2.0/"
+        "10": "https://github.com/ultralytics/assets/releases/download/v8.2.0/"
+        "v10": "https://github.com/ultralytics/assets/releases/download/v8.2.0/"
+        "11": "https://github.com/ultralytics/assets/releases/download/v8.3.0/"
+        "v11": "https://github.com/ultralytics/assets/releases/download/v8.3.0/"
     
   # MediaPipe Face Analysis
   mediapipe:

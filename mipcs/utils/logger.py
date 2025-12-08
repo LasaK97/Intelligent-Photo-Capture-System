@@ -1,3 +1,5 @@
+from . import structlog_patch
+
 import asyncio
 import logging
 import logging.handlers
@@ -10,8 +12,6 @@ from datetime import datetime
 import structlog
 
 from structlog.types import FilteringBoundLogger
-
-from config import settings
 
 project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
@@ -237,6 +237,3 @@ def get_global_logger() -> FilteringBoundLogger:
     if _logger is None:
         _logger = init_logging()
     return _logger
-
-
-
