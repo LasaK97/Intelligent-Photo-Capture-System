@@ -155,9 +155,7 @@ class YOLOPoseDetector:
             #load model in thread pool
             def _load_model():
                 model = YOLO(str(model_path), task='pose')
-
-                #warm up
-                dummy_input = np.zeros((640, 640, 3), dtype = np.uint8)
+                dummy_input = np.zeros((640, 640, 3), dtype=np.uint8)
                 model(dummy_input, verbose=False)
                 return model
 

@@ -277,133 +277,47 @@ class YOLOModelConverter:
             warnings.filterwarnings('ignore')
             os.environ['YOLO_VERBOSE'] = 'False'
 
-            import tensorrt as trt
             from ultralytics import YOLO
-            try:
-                from tqdm import tqdm
-                has_tqdm = True
-            except ImportError:
-                has_tqdm = False
 
-            logger.info("-"*70)
-            logger.info("[1/3] Exporting to ONNX...")
+            logger.info("-" * 70)
+            logger.info("Converting to TensorRT with Ultralytics export")
 
             model = YOLO(str(self.pt_model_path))
-            onnx_path = self.pt_model_path.with_suffix(".onnx")
 
-            model.export(
-                format="onnx",
-                imgsz=self.input_size,
-                dynamic=False,
-                simplify=True
-            )
-
-            if not onnx_path.exists():
-                logger.error("ONNX export failed")
-                return False
-
-            onnx_size_mb = onnx_path.stat().st_size / (1024 * 1024)
-            logger.info(f"✓ ONNX created ({onnx_size_mb:.2f} MB)")
-
-            logger.info("-"*70)
-            logger.info("[2/3] Building TensorRT engine...")
-
-            TRT_LOGGER = trt.Logger(trt.Logger.VERBOSE)
-            builder = trt.Builder(TRT_LOGGER)
-            network = builder.create_network(
-                1 << int(trt.NetworkDefinitionCreationFlag.EXPLICIT_BATCH)
-            )
-            parser = trt.OnnxParser(network, TRT_LOGGER)
-
-            with open(onnx_path, "rb") as f:
-                onnx_data = f.read()
-                if not parser.parse(onnx_data):
-                    logger.error("Failed to parse ONNX")
-                    for error in range(parser.num_errors):
-                        logger.error(f"Error {error}: {parser.get_error(error)}")
-                    return False
-
-            config = builder.create_builder_config()
-
-            workspace_bytes = self.workspace_size * (1 << 30)
-            config.set_memory_pool_limit(trt.MemoryPoolType.WORKSPACE, workspace_bytes)
+            export_args = {
+                "format": "engine",
+                "imgsz": self.input_size,
+                "batch": self.batch_size,
+                "workspace": self.workspace_size,
+                "verbose": False,
+            }
 
             if self.precision == "FP16":
-                if builder.platform_has_fast_fp16:
-                    config.set_flag(trt.BuilderFlag.FP16)
-                    logger.info("✓ FP16 precision enabled")
-                else:
-                    logger.warning("FP16 not supported, using FP32")
+                export_args["half"] = True
+                logger.info("✓ FP16 precision enabled")
             elif self.precision == "INT8":
-                if builder.platform_has_fast_int8:
-                    config.set_flag(trt.BuilderFlag.INT8)
-                    logger.info("✓ INT8 precision enabled")
-                else:
-                    logger.warning("INT8 not supported, using FP32")
+                export_args["int8"] = True
+                logger.warning("INT8 precision requires calibration data")
 
-            device_name = torch.cuda.get_device_name(0).lower()
-            if any(x in device_name for x in ['tegra', 'xavier', 'orin', 'nano']):
-                config.set_flag(trt.BuilderFlag.PREFER_PRECISION_CONSTRAINTS)
-                logger.info("✓ Jetson optimizations applied")
+            logger.info("Building TensorRT engine...")
+            export_path = model.export(**export_args)
 
-            if has_tqdm:
-                pbar = tqdm(total=0, desc="Building", bar_format='{desc}: {elapsed}', ncols=80)
-
-                build_done = threading.Event()
-                build_result = [None]
-
-                def build_engine():
-                    try:
-                        build_result[0] = builder.build_serialized_network(network, config)
-                    except Exception as e:
-                        build_result[0] = e
-                    finally:
-                        build_done.set()
-
-                build_thread = threading.Thread(target=build_engine)
-                build_thread.start()
-
-                while not build_done.is_set():
-                    pbar.update(0)
-                    time.sleep(1)
-
-                build_thread.join()
-                pbar.close()
-
-                serialized_engine = build_result[0]
-
-                if isinstance(serialized_engine, Exception):
-                    raise serialized_engine
-            else:
-                serialized_engine = builder.build_serialized_network(network, config)
-
-            if not serialized_engine:
-                logger.error("Engine build failed")
-                return False
-
-            logger.info("✓ Engine built successfully")
-
-            logger.info("-"*70)
-            logger.info("[3/3] Saving engine...")
-
-            with open(self.model_path, 'wb') as f:
-                f.write(serialized_engine)
+            export_path = Path(export_path)
+            if export_path != self.model_path:
+                logger.info(f"Moving engine to: {self.model_path}")
+                import shutil
+                shutil.move(str(export_path), str(self.model_path))
 
             engine_size_mb = self.model_path.stat().st_size / (1024 * 1024)
-            compression = (1 - engine_size_mb / onnx_size_mb) * 100
-
             elapsed_time = time.time() - start_time
             minutes = int(elapsed_time // 60)
             seconds = int(elapsed_time % 60)
 
             logger.info(f"✓ Engine saved ({engine_size_mb:.2f} MB)")
-            logger.info(f"✓ Compression: {compression:.1f}%")
             logger.info(f"✓ Time: {minutes}m {seconds}s")
 
             return True
-        except ImportError as e:
-            logger.error("TensorRT not found")
-            return False
+
         except Exception as e:
             logger.error(f"Conversion failed: {e}")
             import traceback
