@@ -6,45 +6,20 @@ from unittest.mock import Mock, patch
 
 import sys
 from pathlib import Path
+
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
-
-from mipcs.vision.face_analyzer import MediaPipeFaceAnalyzer
-from config.settings import Settings
-from mipcs.utils.exceptions import FaceAnalysisError
-
-
-@pytest.fixture
-def mock_config():
-    """Create mock configuration for testing."""
-    config = Mock(spec=Settings)
-    config.vision = Mock()
-    config.vision.face_detection_confidence = 0.7
-    config.vision.face_mesh_confidence = 0.5
-    config.vision.max_faces = 4
-    config.vision.frontal_face_threshold = 30.0  # degrees
-    return config
-
-
-@pytest.fixture
-def face_analyzer(mock_config):
-    """Create face analyzer instance."""
-    with patch('mediapipe.solutions.face_mesh.FaceMesh'):
-        analyzer = MediaPipeFaceAnalyzer(mock_config)
-        yield analyzer
+from mipcs.vision.face_analyzer import MediaPipeFaceAnalyzer, FaceAnalysis
 
 
 @pytest.fixture
 def sample_face_frame():
     """Create a sample frame with a face-like region."""
     frame = np.zeros((480, 640, 3), dtype=np.uint8)
-    # Draw simple face-like shape
     cv2.circle(frame, (320, 240), 80, (200, 180, 160), -1)
-    # Eyes
     cv2.circle(frame, (300, 220), 10, (50, 50, 50), -1)
     cv2.circle(frame, (340, 220), 10, (50, 50, 50), -1)
-    # Mouth
     cv2.ellipse(frame, (320, 260), (25, 15), 0, 0, 180, (100, 50, 50), -1)
     return frame
 
@@ -52,153 +27,164 @@ def sample_face_frame():
 class TestMediaPipeFaceAnalyzer:
     """Test suite for MediaPipeFaceAnalyzer class."""
 
-    def test_initialization(self, mock_config):
+    def test_initialization(self):
         """Test face analyzer initialization."""
-        with patch('mediapipe.solutions.face_mesh.FaceMesh') as mock_face_mesh:
-            analyzer = MediaPipeFaceAnalyzer(mock_config)
+        analyzer = MediaPipeFaceAnalyzer()
 
-            assert analyzer.config == mock_config
-            mock_face_mesh.assert_called_once()
+        assert analyzer is not None
+        assert analyzer.models_loaded is False
+        assert analyzer.face_mesh is None
+        assert analyzer.face_detection is None
 
     @pytest.mark.asyncio
-    async def test_face_analysis_with_detection(self, face_analyzer, sample_face_frame):
+    async def test_model_loading(self):
+        """Test MediaPipe model loading."""
+        with patch('mediapipe.solutions.face_mesh.FaceMesh'), \
+                patch('mediapipe.solutions.face_detection.FaceDetection'):
+            analyzer = MediaPipeFaceAnalyzer()
+            await analyzer.load_models()
+
+            assert analyzer.models_loaded is True
+
+    @pytest.mark.asyncio
+    async def test_face_analysis_with_detection(self, sample_face_frame):
         """Test face analysis when face is detected."""
-        # Mock MediaPipe detection results
-        mock_results = Mock()
-        mock_results.multi_face_landmarks = [Mock()]
+        with patch('mediapipe.solutions.face_mesh.FaceMesh') as mock_face_mesh_class, \
+                patch('mediapipe.solutions.face_detection.FaceDetection'):
+            # Mock MediaPipe detection results
+            mock_face_mesh = Mock()
+            mock_results = Mock()
+            mock_results.multi_face_landmarks = [Mock()]
 
-        # Mock landmark coordinates for frontal face
-        mock_landmark = Mock()
-        mock_landmark.x = 0.5
-        mock_landmark.y = 0.5
-        mock_landmark.z = 0.0
+            # Mock landmark coordinates for frontal face
+            mock_landmark = Mock()
+            mock_landmark.x = 0.5
+            mock_landmark.y = 0.5
+            mock_landmark.z = 0.0
 
-        mock_results.multi_face_landmarks[0].landmark = [mock_landmark] * 468
+            mock_results.multi_face_landmarks[0].landmark = [mock_landmark] * 468
+            mock_face_mesh.process = Mock(return_value=mock_results)
+            mock_face_mesh_class.return_value = mock_face_mesh
 
-        face_analyzer.face_mesh.process = Mock(return_value=mock_results)
+            analyzer = MediaPipeFaceAnalyzer()
+            await analyzer.load_models()
 
-        person_bbox = [200, 100, 440, 380]  # x1, y1, x2, y2
-        result = await face_analyzer.analyze_face_orientation(sample_face_frame, person_bbox)
+            person_bbox = (200, 100, 440, 380)
+            result = await analyzer.analyze_face_orientation(sample_face_frame, person_bbox)
 
-        assert result['landmarks_detected'] is True
-        assert 'facing_camera' in result
-        assert 'orientation' in result
-        assert 'confidence' in result
+            assert result is not None
+            assert isinstance(result, FaceAnalysis)
+            assert result.bbox is not None
+            assert result.facing_camera is not None
+            assert result.orientation is not None
 
     @pytest.mark.asyncio
-    async def test_face_analysis_no_detection(self, face_analyzer):
+    async def test_face_analysis_no_detection(self):
         """Test face analysis when no face is detected."""
         empty_frame = np.zeros((480, 640, 3), dtype=np.uint8)
 
-        # Mock no detection results
-        mock_results = Mock()
-        mock_results.multi_face_landmarks = None
+        with patch('mediapipe.solutions.face_mesh.FaceMesh') as mock_face_mesh_class, \
+                patch('mediapipe.solutions.face_detection.FaceDetection'):
+            mock_face_mesh = Mock()
+            mock_results = Mock()
+            mock_results.multi_face_landmarks = None
+            mock_face_mesh.process = Mock(return_value=mock_results)
+            mock_face_mesh_class.return_value = mock_face_mesh
 
-        face_analyzer.face_mesh.process = Mock(return_value=mock_results)
+            analyzer = MediaPipeFaceAnalyzer()
+            await analyzer.load_models()
 
-        person_bbox = [200, 100, 440, 380]
-        result = await face_analyzer.analyze_face_orientation(empty_frame, person_bbox)
+            person_bbox = (200, 100, 440, 380)
+            result = await analyzer.analyze_face_orientation(empty_frame, person_bbox)
 
-        assert result['landmarks_detected'] is False
-        assert result['facing_camera'] is False
-        assert result['orientation'] == 'unknown'
-        assert result['confidence'] == 0.0
-
-    @pytest.mark.asyncio
-    async def test_invalid_bbox_handling(self, face_analyzer, sample_face_frame):
-        """Test handling of invalid bounding boxes."""
-        invalid_bboxes = [
-            None,
-            [],
-            [0, 0, 0, 0],  # Zero area
-            [100, 100, 50, 50],  # Negative dimensions
-            [-50, -50, 100, 100]  # Partially out of bounds
-        ]
-
-        for bbox in invalid_bboxes:
-            with pytest.raises(FaceAnalysisError):
-                await face_analyzer.analyze_face_orientation(sample_face_frame, bbox)
-
-    def test_extract_face_crop(self, face_analyzer, sample_face_frame):
-        """Test face region extraction from frame."""
-        person_bbox = [200, 100, 440, 380]
-
-        face_crop = face_analyzer._extract_face_crop(sample_face_frame, person_bbox)
-
-        expected_height = 380 - 100  # bbox height
-        expected_width = 440 - 200  # bbox width
-
-        assert face_crop.shape[:2] == (expected_height, expected_width)
-        assert face_crop.dtype == np.uint8
-
-    def test_orientation_classification(self, face_analyzer):
-        """Test face orientation classification logic."""
-        # Test frontal face
-        frontal_angles = [0.0, 10.0, -8.0, 15.0]
-        for angle in frontal_angles:
-            orientation = face_analyzer._classify_orientation(angle)
-            assert orientation == 'frontal'
-
-        # Test profile face
-        profile_angles = [45.0, -60.0, 90.0, -90.0]
-        for angle in profile_angles:
-            orientation = face_analyzer._classify_orientation(angle)
-            assert orientation == 'profile'
-
-        # Test partial profile
-        partial_angles = [25.0, -35.0, 40.0, -25.0]
-        for angle in partial_angles:
-            orientation = face_analyzer._classify_orientation(angle)
-            assert orientation == 'partial_profile'
-
-    def test_facing_camera_determination(self, face_analyzer):
-        """Test logic for determining if face is facing camera."""
-        # Frontal orientations should be facing camera
-        assert face_analyzer._is_facing_camera('frontal') is True
-
-        # Profile orientations should not be facing camera
-        assert face_analyzer._is_facing_camera('profile') is False
-
-        # Partial profile depends on configuration
-        facing = face_analyzer._is_facing_camera('partial_profile')
-        assert isinstance(facing, bool)
-
-    def test_calculate_head_pose_angle(self, face_analyzer):
-        """Test head pose angle calculation from landmarks."""
-        # Mock landmark data for different poses
-        frontal_landmarks = np.array([
-            [0.3, 0.3, 0.0],  # Left eye corner
-            [0.7, 0.3, 0.0],  # Right eye corner
-            [0.5, 0.7, 0.0]  # Nose tip
-        ])
-
-        angle = face_analyzer._calculate_head_pose_angle(frontal_landmarks)
-        assert isinstance(angle, float)
-        assert -180.0 <= angle <= 180.0
+            # Should return None when no face detected
+            assert result is None or (result.orientation == "profile" and result.confidence <= 0.5)
 
     @pytest.mark.asyncio
-    async def test_multiple_faces_handling(self, face_analyzer, sample_face_frame):
-        """Test handling of multiple faces in single detection."""
-        # Mock multiple face detection
-        mock_results = Mock()
-        mock_results.multi_face_landmarks = [Mock(), Mock()]  # Two faces
+    async def test_performance_stats(self):
+        """Test performance statistics tracking."""
+        with patch('mediapipe.solutions.face_mesh.FaceMesh'), \
+                patch('mediapipe.solutions.face_detection.FaceDetection'):
+            analyzer = MediaPipeFaceAnalyzer()
+            await analyzer.load_models()
 
-        # Mock landmark data for both faces
-        mock_landmark = Mock()
-        mock_landmark.x = 0.5
-        mock_landmark.y = 0.5
-        mock_landmark.z = 0.0
+            stats = analyzer.get_performance_stats()
 
-        for face_landmarks in mock_results.multi_face_landmarks:
-            face_landmarks.landmark = [mock_landmark] * 468
+            assert 'analysis_count' in stats
+            assert stats['analysis_count'] == 0
 
-        face_analyzer.face_mesh.process = Mock(return_value=mock_results)
+    @pytest.mark.asyncio
+    async def test_multiple_faces_analysis(self, sample_face_frame):
+        """Test analyzing multiple faces concurrently."""
+        with patch('mediapipe.solutions.face_mesh.FaceMesh') as mock_face_mesh_class, \
+                patch('mediapipe.solutions.face_detection.FaceDetection'):
+            mock_face_mesh = Mock()
+            mock_results = Mock()
+            mock_results.multi_face_landmarks = [Mock()]
 
-        person_bbox = [200, 100, 440, 380]
-        result = await face_analyzer.analyze_face_orientation(sample_face_frame, person_bbox)
+            mock_landmark = Mock()
+            mock_landmark.x = 0.5
+            mock_landmark.y = 0.5
+            mock_landmark.z = 0.0
+            mock_results.multi_face_landmarks[0].landmark = [mock_landmark] * 468
 
-        # Should process the first/primary face detected
-        assert result['landmarks_detected'] is True
+            mock_face_mesh.process = Mock(return_value=mock_results)
+            mock_face_mesh_class.return_value = mock_face_mesh
+
+            analyzer = MediaPipeFaceAnalyzer()
+            await analyzer.load_models()
+
+            person_bboxes = [
+                (100, 100, 200, 300),
+                (400, 100, 500, 300)
+            ]
+
+            results = await analyzer.analyze_multiple_faces(sample_face_frame, person_bboxes)
+
+            assert len(results) == 2
+
+
+class TestFaceAnalysis:
+    """Test suite for FaceAnalysis data class."""
+
+    def test_face_analysis_creation(self):
+        """Test FaceAnalysis object creation."""
+        bbox = (100, 100, 200, 300)
+
+        analysis = FaceAnalysis(
+            bbox=bbox,
+            facing_camera=True,
+            orientation="frontal",
+            landmarks=None,
+            confidence=0.85,
+            analysis_metrics={'method': 'face_mesh'}
+        )
+
+        assert analysis.bbox == bbox
+        assert analysis.facing_camera is True
+        assert analysis.orientation == "frontal"
+        assert analysis.confidence == 0.85
+
+    def test_face_analysis_to_dict(self):
+        """Test conversion to dictionary."""
+        bbox = (100, 100, 200, 300)
+
+        analysis = FaceAnalysis(
+            bbox=bbox,
+            facing_camera=True,
+            orientation="frontal",
+            landmarks=None,
+            confidence=0.85,
+            analysis_metrics={'method': 'face_mesh'}
+        )
+
+        result_dict = analysis.to_dict()
+
+        assert 'bbox' in result_dict
+        assert 'facing_camera' in result_dict
+        assert 'orientation' in result_dict
+        assert 'confidence' in result_dict
+        assert 'analysis_metrics' in result_dict
 
 
 class TestFaceAnalyzerIntegration:
@@ -206,20 +192,68 @@ class TestFaceAnalyzerIntegration:
 
     @pytest.mark.integration
     @pytest.mark.asyncio
-    async def test_real_face_detection(self, mock_config, sample_face_frame):
+    async def test_real_face_detection(self, sample_face_frame):
         """Test with real MediaPipe model (requires MediaPipe installation)."""
         try:
             import mediapipe
         except ImportError:
             pytest.skip("MediaPipe not installed")
 
-        analyzer = MediaPipeFaceAnalyzer(mock_config)
+        analyzer = MediaPipeFaceAnalyzer()
+        await analyzer.load_models()
 
-        person_bbox = [200, 100, 440, 380]
+        person_bbox = (200, 100, 440, 380)
         result = await analyzer.analyze_face_orientation(sample_face_frame, person_bbox)
 
-        # Should return valid result structure
-        assert 'landmarks_detected' in result
-        assert 'facing_camera' in result
-        assert 'orientation' in result
-        assert 'confidence' in result
+        # Should return valid result structure or None
+        if result is not None:
+            assert isinstance(result, FaceAnalysis)
+            assert result.bbox is not None
+            assert result.facing_camera is not None
+            assert result.orientation is not None
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_performance_benchmark(self, sample_face_frame):
+        """Test face analysis performance."""
+        try:
+            import mediapipe
+        except ImportError:
+            pytest.skip("MediaPipe not installed")
+
+        analyzer = MediaPipeFaceAnalyzer()
+        await analyzer.load_models()
+
+        person_bbox = (200, 100, 440, 380)
+
+        # Run multiple analyses
+        for _ in range(10):
+            await analyzer.analyze_face_orientation(sample_face_frame, person_bbox)
+
+        stats = analyzer.get_performance_stats()
+
+        assert 'analysis_count' in stats
+        if stats['analysis_count'] > 0:
+            assert 'average_analysis_time_ms' in stats
+            # Face analysis should be reasonably fast
+            assert stats['average_analysis_time_ms'] < 100
+
+    @pytest.mark.integration
+    @pytest.mark.asyncio
+    async def test_cleanup(self):
+        """Test cleanup of MediaPipe resources."""
+        try:
+            import mediapipe
+        except ImportError:
+            pytest.skip("MediaPipe not installed")
+
+        analyzer = MediaPipeFaceAnalyzer()
+        await analyzer.load_models()
+
+        assert analyzer.models_loaded is True
+
+        await analyzer.cleanup()
+
+        assert analyzer.models_loaded is False
+        assert analyzer.face_mesh is None
+        assert analyzer.face_detection is None

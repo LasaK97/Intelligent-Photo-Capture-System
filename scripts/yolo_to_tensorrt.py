@@ -289,7 +289,7 @@ class YOLOModelConverter:
                 "imgsz": self.input_size,
                 "batch": self.batch_size,
                 "workspace": self.workspace_size,
-                "verbose": False,
+                "verbose": True,
             }
 
             if self.precision == "FP16":

@@ -181,7 +181,7 @@ class CanonFrameClient:
             )
 
             #socket -> non-blocking
-            self.socket.setblocking(False)
+            # self.socket.setblocking(False)
 
             self.state = ConnectionState.CONNECTED
             self.reconnect_attempts = 0
@@ -233,7 +233,7 @@ class CanonFrameClient:
                 while len(data_buffer) >= 4:
                     frame, bytes_consumed = await self._try_extract_frame(data_buffer)
 
-                    if frame is None:
+                    if frame is not None:
                         data_buffer = data_buffer[bytes_consumed:]
                         await self._process_received_frame(frame)
                     else:

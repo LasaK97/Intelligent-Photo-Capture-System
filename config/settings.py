@@ -234,7 +234,7 @@ class PhotoCaptureConfig(BaseModel):
 class Settings(BaseModel):
     """Main settings class"""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     system: SystemConfig = Field(default_factory=SystemConfig)
     vision: VisionConfig = Field(default_factory=VisionConfig)
