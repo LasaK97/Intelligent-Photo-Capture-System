@@ -164,6 +164,73 @@ class SystemConfig(BaseModel):
     environment: Literal["development", "testing", "production"] = "development"
     debug: bool = True
 
+class CameraMounting(BaseModel):
+    """Camera mounting configs"""
+    height_from_ground: float = Field(1.68, gt=0, description="Camera height in meters")
+    tilt_angle_deg: float = Field(0.0, ge=-45, le=45, description="Camera tilt angle")
+
+class PositioningFiltering(BaseModel):
+    """Positioning filtering configs"""
+    enabled: bool = True
+    median_window_size: int = Field(default=5, ge=1, le=20, description="Window size for median filtering")
+    max_position_change_per_frame: float = Field(default=0.2, gt=0, description="Max position change per frame in meters")
+    outlier_rejection_sigma: float = Field(default=2.0, gt=0, description="Outlier rejection sigma")
+
+class PositioningConfig(BaseModel):
+    """3D Positioning configs"""
+    coordinate_system: str = "camera_frame"
+    camera_mounting: CameraMounting = Field(default_factory=CameraMounting)
+    positioning_filtering: PositioningFiltering = Field(default_factory=PositioningFiltering)
+
+class GimbalConfig(BaseModel):
+    """Gimbal configs"""
+    control_method: Literal["action", "direct"] = "direct"
+    controller_name: str = "gimbal_controller"
+    joint_names: List[str] = ["joint_5", "joint_6", "joint_7"]
+
+    class Limits(BaseModel):
+        yaw_range: Tuple[float, float] = (-1.57, 1.57)
+        pitch_range: Tuple[float, float] = (-0.785, 0.785)
+        roll_range: Tuple[float, float] = (0.0, 0.0)
+
+    class Movement(BaseModel):
+        max_velocity: float = Field(0.5, gt=0)
+        default_move_time: float = Field(1.0, gt=0)
+
+    limits: Limits = Limits()
+    movement: Movement = Movement()
+
+class FocusConfig(BaseModel):
+    """Focus configs"""
+    control_topic: str = "/set_focus_position"
+    motor_range: Tuple[int, int] = (0, 4095)
+    default_focal_length: int = Field(50, gt=0)
+    calculation_method: Literal["hyperfocal", "calibration_table"] = "hyperfocal"
+    hyperfocal_distance: float = Field(15.0, gt=0)
+
+class CameraControlConfig(BaseModel):
+    """Camera control configs"""
+    gimbal: GimbalConfig = Field(default_factory=GimbalConfig)
+    focus: FocusConfig = Field(default_factory=FocusConfig)
+
+class WorkflowConfig(BaseModel):
+    """Workflow configs"""
+    max_session_time_s: float = Field(60.0, gt=0)
+    max_positioning_time_s: float = Field(30.0, gt=0)
+    capture_countdown_s: float = Field(3.0, gt=0)
+    photos_per_session: int = Field(1, ge=1, le=10)
+
+class ActivationConfig(BaseModel):
+    """Activation configs"""
+    trigger_topic: str = "/va_photo_capture"
+    trigger_message: str = "y"
+    auto_start: bool = False
+
+class PhotoCaptureConfig(BaseModel):
+    """Photo capture configs"""
+    workflow: WorkflowConfig = Field(default_factory=WorkflowConfig)
+    activation: ActivationConfig = Field(default_factory=ActivationConfig)
+
 class Settings(BaseModel):
     """Main settings class"""
 

@@ -62,8 +62,8 @@ vision:
     
   # RealSense Depth Processing
   realsense:
-    depth_topic: "/camera/aligned_depth_to_color/image_raw"
-    camera_info_topic: "/camera/aligned_depth_to_color/camera_info"
+#    depth_topic: "/camera/aligned_depth_to_color/image_raw"
+#    camera_info_topic: "/camera/aligned_depth_to_color/camera_info"
     depth_range:
       min: 0.4  # meters
       max: 8.0  # meters
@@ -78,6 +78,20 @@ performance:
   max_cpu_usage: 80  # percentage
   max_gpu_usage: 85  # percentage
   max_memory_usage: 12  # GB
+
+  depth_processing:
+    max_processing_time_ms: 15
+    roi_extraction_method: "center_40_percent"
+    outlier_rejection_enabled: true
+
+  position_calculation:
+    max_calculation_time_ms: 8
+    coordinate_transformation_method: "realsense_intrinsics"
+
+  control_system:
+    max_command_latency_ms: 20
+    gimbal_response_timeout_s: 3.0
+    focus_response_timeout_s: 2.0
 
 # Logging Configuration
 logging:
@@ -103,3 +117,116 @@ testing:
     yolo_inference_ms: 15
     face_analysis_ms: 10
     depth_processing_ms: 5
+
+
+
+#Photo capture workflow
+photo_capture:
+  workflow:
+    max_session_time_s: 60.0
+    max_positioning_time_s: 30.0
+    capture_countdown_s: 3.0
+    photos_per_session: 1
+
+  activation:
+    trigger_topic: "/va_photo_capture"   ##### VA - photo capture system activation topic --> When user request to capture a photo this topic activates the system.
+    trigger_message: "y"
+    auto_start: false
+
+  scene_classification:
+    enabled: true
+    distance_ranges:
+      portrait:        # 1 person
+        min_distance: 3.0
+        max_distance: 4.0
+        optimal_distance: 3.5
+      couple:          # 2 people close together
+        min_distance: 2.5
+        max_distance: 3.5
+        optimal_distance: 3.0
+        max_horizontal_spread: 0.8
+      small_group:     # 3-4 people
+        min_distance: 4.0
+        max_distance: 5.5
+        optimal_distance: 4.5
+        max_horizontal_spread: 2.5
+      medium_group:    # 5-7 people
+        min_distance: 5.0
+        max_distance: 6.5
+        optimal_distance: 5.5
+        max_horizontal_spread: 4.0
+      large_group:     # 8+ people
+        min_distance: 6.0
+        max_distance: 8.0
+        optimal_distance: 7.0
+        max_horizontal_spread: 6.0
+
+# 3D position calculation
+positioning:
+  coordinate_system: "camera_frame"
+
+  camera_mounting:
+    height_from_ground: 1.68 #m
+    tilt_angle_deg: 0.0 #degrees (+ = down)
+
+  position_filtering:
+    enabled: true
+    median_window_size: 5
+    max_position_change_per_frame: 0.2  # m
+    outlier_rejection_sigma: 2.0
+
+  ground_plane:
+    detection_method: "fixed_height"  # "fixed_height" or "ransac"
+    assumption: "flat_ground"
+
+# Camera Control System
+camera_control:
+  gimbal:
+    control_method: "direct"           # "action" or "direct"
+    controller_name: "gimbal_controller"
+    joint_names: ["joint_5", "joint_6", "joint_7"]  # yaw, pitch, roll
+
+    limits:
+      yaw_range: [-1.57, 1.57]        # ±90 degrees
+      pitch_range: [-0.785, 0.785]    # ±45 degrees
+      roll_range: [0.0, 0.0]          # No roll
+
+    movement:
+      max_velocity: 0.5               # rad/s
+      default_move_time: 1.0          # seconds
+
+  focus:
+    control_topic: "/set_focus_position"
+    motor_range: [0, 4095]
+    default_focal_length: 50          # mm
+
+    # Focus calculation method
+    calculation_method: "hyperfocal"  # "hyperfocal" or "calibration_table"
+    hyperfocal_distance: 15.0         # meters (for 50mm f/4)
+
+# ROS2 Topic Configuration
+ros2_topics:
+  # Input Topics
+  realsense_depth: "/camera/aligned_depth_to_color/image_raw"
+  realsense_camera_info: "/camera/aligned_depth_to_color/camera_info"
+  joint_states: "/joint_states"
+  activation_trigger: "/va_photo_capture"
+
+  # Output Topics
+  gimbal_commands: "/gimbal_controller/commands"
+  focus_commands: "/set_focus_position"
+  capture_trigger: "/capture_image_topic"
+  tts_output: "/tts_text_output"
+
+  # Status Topics
+  system_status: "/photo_capture/status"
+  detection_debug:
+
+# Control Loop Timing
+control_timing:
+  main_loop_hz: 5.0                   # State machine updates
+  vision_processing_hz: 10.0          # Vision pipeline
+  depth_processing_hz: 5.0            # Depth calculations
+  position_update_hz: 5.0             # 3D position updates
+
+

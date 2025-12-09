@@ -1,0 +1,132 @@
+##
+# Photo capture workflow configuration
+
+workflow:
+  #state machine configs
+  states:
+    idle:
+      description: "Waiting for activation"
+      timeout_s: null
+
+    initializing:
+      description: "Setting up gimbal and focus"
+      timeout_s: 5.0
+      actions:
+        - reset_gimbal_position
+        - set_default_focus
+
+    detecting:
+      description: "Looking for people"
+      timeout_s: 10.0
+      min_detection_time_s: 1.0     # Require stable detection
+      min_person_confidence: 0.7
+
+    positioning:
+      description: "Analyzing positions and guiding subjects"
+      timeout_s: 30.0
+      max_guidance_attempts: 5
+      position_tolerance_m: 0.3     # How close to optimal position
+
+    adjusting_camera:
+      description: "Setting optimal gimbal and focus"
+      timeout_s: 5.0
+
+    verifying:
+      description: "Final checks before capture"
+      timeout_s: 3.0
+      required_checks:
+        - faces_visible
+        - positions_stable
+        - camera_ready
+
+    countdown:
+      description: "3-2-1 countdown"
+      duration_s: 3.0
+
+    capturing:
+      description: "Taking photo"
+      timeout_s: 5.0
+
+    complete:
+      description: "Session finished"
+      display_time_s: 2.0
+
+#voice guideline messages
+voice_guidance:
+  language: "en"
+
+  messages:
+    welcome: "Hello! Please come in front of me for your photo"
+    single_person_detected: "Great! I can see you. Please move to the center"
+    couple_detected: "Perfect! I can see both of you. Please move closer together"
+    group_detected: "Wonderful! I can see your group. Please gather closer"
+    move_closer: "Please step a bit closer to me"
+    move_further: "Please step back a little"
+    move_left: "Please move slightly to your left"
+    move_right: "Please move slightly to your right"
+    move_together: "Please move closer together"
+    spread_out: "Please spread out a little more"
+    perfect_position: "Perfect! Please stay still"
+    countdown_start: "Get ready! Photo in"
+    countdown_numbers: ["3", "2", "1"]
+    capture_complete: "Great photo! Thank you!"
+    timeout_warning: "I'm having trouble seeing you clearly. Please try again"
+
+  timing:
+    message_interval_s: 2.0         # Minimum time between messages
+    position_update_interval_s: 3.0 # How often to give position
+
+# composition rules
+composition:
+  # Framing padding (percentage of frame)
+  padding:
+    portrait:
+      horizontal: 0.15              # 15% padding on sides
+      vertical: 0.20                # 20% padding top/bottom
+    couple:
+      horizontal: 0.12
+      vertical: 0.15
+    small_group:
+      horizontal: 0.10
+      vertical: 0.12
+    medium_group:
+      horizontal: 0.08
+      vertical: 0.10
+    large_group:
+      horizontal: 0.05
+      vertical: 0.08
+
+  # Preferred subject placement
+  subject_positioning:
+    vertical_center_offset: 0.1     # Slightly above center (rule of thirds)
+    horizontal_tolerance: 0.05      # How centered horizontally
+
+  # Quality requirements
+  quality_checks:
+    min_face_size_pixels: 80        # Minimum face size for quality
+    max_motion_blur_threshold: 5.0  # Pixel movement between frames
+    min_contrast_level: 0.3         # Image contrast requirement
+
+# Error Handling
+error_handling:
+  depth_failures:
+    max_consecutive_failures: 5
+    fallback_to_estimation: true
+    estimation_method: "bbox_scaling"
+
+  detection_failures:
+    max_no_detection_time_s: 5.0
+    recovery_actions:
+      - increase_detection_confidence_threshold
+      - expand_detection_area
+      - reduce_lighting_requirements
+
+  control_failures:
+    gimbal_timeout_recovery: "return_to_home"
+    focus_timeout_recovery: "use_hyperfocal"
+    max_recovery_attempts: 3
+
+  system_failures:
+    critical_component_timeout_s: 10.0
+    emergency_shutdown_enabled: true
+    auto_restart_attempts: 2

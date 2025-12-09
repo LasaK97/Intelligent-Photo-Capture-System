@@ -66,8 +66,6 @@ class TimeoutError(ManriixError):
     """Timeout related errors."""
     pass
 
-# Specific error types for Phase 1
-
 class ModelLoadError(DetectionError):
     """Error loading AI models."""
     pass
@@ -90,4 +88,58 @@ class DepthDataError(DepthProcessingError):
 
 class CalibrationError(VisionError):
     """Camera calibration related errors."""
+    pass
+
+class ControlError(ManriixError):
+    """Base class for control system errors."""
+    pass
+
+
+class GimbalError(ControlError):
+    """Gimbal control related errors."""
+    pass
+
+
+class FocusError(ControlError):
+    """Focus motor related errors."""
+    pass
+
+
+class PositioningError(ManriixError):
+    """3D positioning related errors."""
+    pass
+
+
+class SceneClassificationError(ManriixError):
+    """Scene analysis related errors."""
+    pass
+
+
+class StateMachineError(ManriixError):
+    """State machine execution errors."""
+    pass
+
+
+class GimbalTimeoutError(GimbalError):
+    """Gimbal movement timeout."""
+    pass
+
+
+class FocusCalibrationError(FocusError):
+    """Focus calibration data error."""
+    pass
+
+
+class PositionCalculationError(PositioningError):
+    """3D position calculation error."""
+    pass
+
+
+class DepthInvalidError(PositioningError):
+    """Invalid or missing depth data."""
+    pass
+
+
+class SceneAnalysisError(SceneClassificationError):
+    """Scene analysis computation error."""
     pass
