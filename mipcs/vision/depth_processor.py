@@ -12,6 +12,7 @@ try:
     from rclpy.node import Node
     from sensor_msgs.msg import Image, CameraInfo
     from cv_bridge import CvBridge
+
     ROS_AVAILABLE = True
 except ImportError:
     ROS_AVAILABLE = False
@@ -38,6 +39,7 @@ from ..utils.exceptions import (
 
 logger = get_logger(__name__)
 
+
 class DepthData:
     """data class for depth processing results"""
 
@@ -48,12 +50,18 @@ class DepthData:
             position_3d: Tuple[float, float, float],
             roi_stats: Dict[str, float],
             processing_time_ms: float,
+            quality_score: float = 0.0,
+            extraction_method: str = "center_roi",
+            depth_quality_reason: str = "unknown",
     ):
         self.depth_value = depth_value
         self.confidence = confidence
         self.position_3d = position_3d
         self.roi_stats = roi_stats
-        self.processing_time_ms = processing_time_ms
+        self.processing_time_ms = processing_time_ms,
+        self.quality_score = quality_score,
+        self.extraction_method = extraction_method,
+        self.depth_quality_reason = depth_quality_reason,
 
     def to_dict(self) -> Dict:
         """Convert to dictionary for serialization."""
@@ -62,8 +70,12 @@ class DepthData:
             'confidence': self.confidence,
             'position_3d': self.position_3d,
             'roi_stats': self.roi_stats,
-            'processing_time_ms': self.processing_time_ms
+            'processing_time_ms': self.processing_time_ms,
+            'quality_score': self.quality_score,
+            'extraction_method': self.extraction_method,
+            'depth_quality_reason': self.depth_quality_reason,
         }
+
 
 class CameraIntrinsics:
     """Intrinsic parameters for depth projection."""
@@ -77,7 +89,7 @@ class CameraIntrinsics:
             self.width = camera_info.width
             self.height = camera_info.height
         else:
-            #default reslasense d455 intrinsics
+            # default reslasense d455 intrinsics
             self.fx = 640.0
             self.fy = 640.0
             self.cx = 640.0
@@ -99,27 +111,79 @@ class CameraIntrinsics:
 
         return (x, y, z)
 
-
     def project_point_to_pixel(
             self,
             point: Tuple[float, float, float]
     ) -> Tuple[int, int]:
         """Convert 3D point to pixel coordinate"""
 
-        x, y, z =point
+        x, y, z = point
 
-        if z<=0:
+        if z <= 0:
             raise ValueError("Invalid depth value for projection.( Z must be greater than 0)")
 
-        u = int((x * self.fx) /z + self.cx)
-        v = int((y * self.fy) /z + self.cy)
+        u = int((x * self.fx) / z + self.cx)
+        v = int((y * self.fy) / z + self.cy)
 
         return (u, v)
 
     def is_valid_pixel(self, pixel: Tuple[int, int]) -> bool:
         """Check if pixel is valid"""
-        u, v =pixel
+        u, v = pixel
         return 0 <= u < self.width and 0 <= v < self.height
+
+
+##quality checking class
+class DepthQualityChecker:
+    """validates depth data quality """
+
+    def __init__(self, config):
+        self.config = config
+        self.min_valid_ratio = config.min_valid_pixels_ratio
+        self.depth_range = (config.depth_range.min, config.depth_range.max)
+
+    def check_depth_quality(
+            self,
+            depth_roi: np.ndarray
+    ) -> Tuple[bool, float, str]:
+        if depth_roi is None or depth_roi.size == 0:
+            return False, 0, "empty_roi"
+
+        # check valid pixel percentage
+        min_depth_mm = self.depth_range[0] * 1000
+        max_depth_mm = self.depth_range[1] * 1000
+        valid_mask = (depth_roi > min_depth_mm) & (depth_roi < max_depth_mm)
+        valid_ratio = np.count_nonzero(valid_mask) / depth_roi.size
+
+        if valid_ratio < self.min_valid_ratio:
+            return False, valid_ratio, "insufficient_valid_pixels"
+
+        # check for noise patterns
+        valid_depths = depth_roi[valid_mask]
+        if len(valid_depths) < 5:
+            return False, valid_ratio, "too_few_valid_points"
+
+        # calculate quality score (0.0 - 1.0)
+        depth_std = np.std(valid_depths)
+        depth_mean = np.mean(valid_depths)
+
+        # lower coef of variation = higher quality
+        cv = depth_std / depth_mean if depth_mean > 0 else 1.0
+        quality_score = valid_ratio * (1.0 - min(cv, 0.5))
+
+        return True, quality_score, "valid"
+
+    def detect_depth_holes(self, depth_roi: np.ndarray) -> bool:
+        """Detect if ROI has significant depth holes (missing data)"""
+        if depth_roi is None or depth_roi.size == 0:
+            return True
+
+        zero_mask = depth_roi == 0
+        zero_ratio = np.count_nonzero(zero_mask) / depth_roi.size
+
+        # if more than 40% holes --> PROBLEM
+        return zero_ratio > 0.4
+
 
 class DepthProcessor:
 
@@ -128,24 +192,38 @@ class DepthProcessor:
         self.config = self.settings.vision.realsense
         self.node = node
 
-        #camera calibration
+        # camera calibration
         self.intrinsics: Optional[CameraIntrinsics] = None
         self.intrinsics_received = False
 
-        #current depth data
+        # current depth data
         self.latest_depth_image: Optional[np.ndarray] = None
         self.depth_timestamp = 0.0
 
-        #ROS components
+        # ROS components
         self.bridge = CvBridge() if ROS_AVAILABLE else None
         self.depth_subscription = None
         self.camera_info_subscription = None
 
-        #performance tracking
+        # performance tracking
         self.processing_count = 0
         self.total_processing_time = 0
+        self.processing_stats = {
+            'frames_processed': 0,
+            'failed_extractions': 0,
+            'average_processing_time_ms': 0.0,
+            'extraction_method_counts': {
+                'center_roi': 0,
+                'expanded_roi': 0,
+                'statistical': 0,
+                'fallback_estimate': 0
+            }
+        }
 
         self.thread_manager = get_thread_manager()
+
+        # init quality checker
+        self.quality_checker = DepthQualityChecker(self.config)
 
         if self.node and ROS_AVAILABLE:
             self._setup_ros_subscription()
@@ -180,17 +258,17 @@ class DepthProcessor:
     def _depth_callback(self, msg: Image) -> None:
         """ROS Callback for depth image."""
         try:
-            #convert ros image to numpy array
+            # convert ros image to numpy array
             depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="16UC1")
 
-            if not self._validate_depth_image(depth_image):
+            if not self._validate_depth_image(depth_image):  ##### CHECK
                 logger.warning("invalid_depth_image_received")
                 return
 
             self.latest_depth_image = depth_image
             self.depth_timestamp = time.time()
 
-            #update processing stats
+            # update processing stats
             self.processing_stats['frames_processed'] += 1
 
             logger.debug("depth_image_received", shape=depth_image.shape, encoding=msg.encoding)
@@ -235,7 +313,7 @@ class DepthProcessor:
             bbox: Tuple[int, int, int, int],
             depth_image: Optional[np.ndarray] = None,
     ) -> Optional[DepthData]:
-        """Extract robust depth value for person bbox"""
+        """Extract robust depth value for person bbox with multi-level fallbacks"""
 
         start_time = time.time()
 
@@ -246,46 +324,67 @@ class DepthProcessor:
             logger.warning("no_depth_image_received")
             return None
 
-        if not self.intrinsics_received:
-            logger.warning("camera_intrinsics_not_available")
+        # validate depth image
+        if not self._validate_depth_image(depth_image):
+            logger.warning("invalid_depth_image_received")
             return None
 
+        # check intrinsics
+        if not self.intrinsics_received:
+            logger.warning("camera_intrinsics_not_available")
+            self.intrinsics = CameraIntrinsics()
+            self.intrinsics_received = True
+
         try:
-            depth_result = await self.thread_manager.run_compute_task(
-                self._extract_depth_sync, bbox, depth_image
-            )
+            result = await self._extract_depth_multi_level(bbox, depth_image)
 
-            process_time = (time.time() - start_time)  * 1000
-            self._update_performance_metrics(process_time)
-
-            if depth_result is None:
+            if result is None:
+                logger.debug("all_depth_extraction_methods_failed", bbox=bbox)
                 return None
 
-            depth_value, confidence, roi_stats = depth_result
+            depth_value, confidence, roi_stats, method_used = result
 
-            #calculate 3D position
-            x1, y1, x2, y2 = bbox
-            center_pixel = ((x1 + x2) // 2, (y1 + y2) // 2)
-            position_3d = self.intrinsics.deproject_pixel_to_point(center_pixel, depth_value)
+            # calculate 3D position
+            bbox_center = (
+                (bbox[0] + bbox[2]) / 2,
+                (bbox[1] + bbox[3]) / 2
+            )
+
+            position_3d = self.intrinsics.deproject_pixel_to_point(
+                bbox_center,
+                depth_value
+            )
+
+            # cal processing time
+            processing_time_ms = (time.time() - start_time) * 1000
+
+            # update performance metrics
+            self._update_performance_metrics(processing_time_ms)
 
             depth_data = DepthData(
                 depth_value=depth_value,
                 confidence=confidence,
                 position_3d=position_3d,
                 roi_stats=roi_stats,
-                processing_time_ms=process_time
+                processing_time_ms=processing_time_ms,
+                quality_score=roi_stats.get('quality_score', 0.0),
+                extraction_method=method_used,
+                depth_quality_reason="valid"
             )
 
             logger.debug(
                 "depth_extraction_successful",
-                depth_m=depth_value,
+                bbox=bbox,
+                depth=depth_value,
                 confidence=confidence,
-                processing_time_ms=process_time
+                method=method_used,
+                processing_time_ms=processing_time_ms
             )
+
             return depth_data
 
         except Exception as e:
-            logger.error("depth_extraction_failed", error=str(e), bbox=bbox)
+            logger.error("depth_extraction_error", error=str(e), bbox=bbox)
             raise DepthProcessingError(f"Depth extraction failed: {e}") from e
 
     def _extract_depth_sync(
@@ -296,13 +395,13 @@ class DepthProcessor:
         """Synchronously extract depth value from depth image"""
         x1, y1, x2, y2 = bbox
 
-        #validate bbox
+        # validate bbox
         h, w = depth_image.shape
         if x1 >= x2 or y1 >= y2 or x1 < 0 or y1 < 0 or x2 > w or y2 > h:
             logger.warning("invalid_bbox", bbox=bbox, image_shape=(h, w))
             return None
 
-        #extract bbox center
+        # extract bbox center
         bbox_w, bbox_h = x2 - x1, y2 - y1
         roi_w = max(10, int(bbox_w * self.config.roi_percentage))
         roi_h = max(10, int(bbox_h * self.config.roi_percentage))
@@ -310,25 +409,25 @@ class DepthProcessor:
         center_x = (x1 + x2) // 2
         center_y = (y1 + y2) // 2
 
-        roi_x1 =  max(0, center_x - roi_w // 2)
+        roi_x1 = max(0, center_x - roi_w // 2)
         roi_y1 = max(0, center_y - roi_h // 2)
         roi_x2 = min(w, center_x + roi_w // 2)
         roi_y2 = min(h, center_y + roi_h // 2)
 
-        #extract ROI
+        # extract ROI
         roi = depth_image[roi_y1:roi_y2, roi_x1:roi_x2]
 
         if roi.size == 0:
             return None
 
-        #convert depth values to meters
+        # convert depth values to meters
         roi_meters = roi.astype(np.float32) / 1000.00
 
-        #filter valid
+        # filter valid
         valid_mask = (
-            (roi_meters >= self.config.depth_range.min) &
-            (roi_meters <= self.config.depth_range.max) &
-            (roi_meters > 0)
+                (roi_meters >= self.config.depth_range.min) &
+                (roi_meters <= self.config.depth_range.max) &
+                (roi_meters > 0)
         )
 
         valid_depths = roi_meters[valid_mask]
@@ -337,13 +436,14 @@ class DepthProcessor:
             logger.debug("no_valid_depth_values", roi_shape=roi.shape)
             return None
 
-        #check if we have sufficient valid pixels
+        # check if we have sufficient valid pixels
         valid_ratio = len(valid_depths) / roi.size
         if valid_ratio < self.config.min_valid_pixels_ratio:
-            logger.debug("insufficient_valid_depth_pixels", valid_ratio=valid_ratio, required=self.config.min_valid_pixels_ratio)
+            logger.debug("insufficient_valid_depth_pixels", valid_ratio=valid_ratio,
+                         required=self.config.min_valid_pixels_ratio)
             return None
 
-        #outlier rejection using statistical filtering
+        # outlier rejection using statistical filtering
         depth_stats = self._calculate_depth_statistics(valid_depths)
         filtered_depths = self._reject_outliers(valid_depths, depth_stats)
 
@@ -351,10 +451,10 @@ class DepthProcessor:
             logger.debug("too_many_outliers_rejected")
             return None
 
-        #final depth value (median for robustness)
+        # final depth value (median for robustness)
         final_depth = float(np.median(filtered_depths))
 
-        #calculate confidence based data quality
+        # calculate confidence based data quality
         confidence = self._calculate_depth_confidence(
             filtered_depths, depth_stats, valid_ratio
         )
@@ -390,10 +490,10 @@ class DepthProcessor:
         mean_depth = stats['mean']
         std_depth = stats['std']
 
-        #use a configurable sigma threshold for outlier rejection
+        # use a configurable sigma threshold for outlier rejection
         threshold = self.config.outlier_rejection_sigma * std_depth
 
-        #keep values within threshold
+        # keep values within threshold
         mask = np.abs(depths - mean_depth) < threshold
         return depths[mask]
 
@@ -402,16 +502,16 @@ class DepthProcessor:
             filtered_depths: np.ndarray,
             stats: Dict[str, float],
             valid_ratio: float
-    )-> float:
+    ) -> float:
         """calculate confidence level for depth values"""
         confidence = valid_ratio
 
-        #penalty for high variance (low precision)
+        # penalty for high variance (low precision)
         if stats['std'] > 0:
             std_penalty = min(0.3, stats['std'] / stats['mean'])
             confidence *= (1.0 - std_penalty)
 
-        #bonus for sufficient data points
+        # bonus for sufficient data points
         if len(filtered_depths) > 50:
             confidence = min(1.0, confidence * 1.1)
 
@@ -422,24 +522,298 @@ class DepthProcessor:
 
         return float(np.clip(confidence, 0.0, 1.0))
 
+    def _get_roi_from_bbox(
+            self,
+            bbox: Tuple[int, int, int, int],
+            depth_image: np.ndarray,
+            size_factor: float = 0.4
+    ) -> Optional[np.ndarray]:
+        """Extract roi from bbox with given size factor"""
+        x1, y1, x2, y2 = bbox
+
+        center_x = (x1 + x2) // 2
+        center_y = (y1 + y2) // 2
+        width = x2 - x1
+        height = y2 - y1
+
+        # cal ROI bounds
+        roi_width = int(width * size_factor)
+        roi_height = int(height * size_factor)
+
+        roi_x1 = max(0, center_x - roi_width // 2)
+        roi_y1 = max(0, center_y - roi_height // 2)
+        roi_x2 = min(depth_image.shape[1], center_x + roi_width // 2)
+        roi_y2 = min(depth_image.shape[0], center_y + roi_height // 2)
+
+        roi = depth_image[roi_y1:roi_y2, roi_x1:roi_x2]
+
+        if roi.size == 0:
+            return None
+
+        return roi
+
+    # Extraction levels:
+    #         1. Center ROI (40% of bbox) - Most reliable
+    #         2. Expanded ROI (60% of bbox) - Fallback if center fails
+    #         3. Statistical filtering - Aggressive filtering on full bbox
+    #         4. Bbox-based estimate - Last resort
+
+    async def _extract_center_roi_depth(
+            self,
+            bbox: Tuple[int, int, int, int],
+            depth_image: np.ndarray,
+    ) -> Optional[Tuple[float, float, Dict[str, Any]]]:
+        """Extract depth from center 40% of bbox """
+
+        roi = self._get_roi_from_bbox(bbox, depth_image, size_factor=0.4)
+        if roi is None:
+            return None
+
+        # check quality
+        is_valid, quality_score, reason = self.quality_checker.check_depth_quality(roi)
+        if not is_valid:
+            logger.debug("center_roi_quality_check_failed", reason=reason)
+            return None
+
+        # extract valid depths
+        min_depth = self.config.depth_range.min * 1000
+        max_depth = self.config.depth_range.max * 1000
+        valid_depths = roi[(roi > min_depth) & (roi < max_depth)]
+
+        if len(valid_depths) == 0:
+            return None
+
+        # statistical filtering
+        depth_stats = self._calculate_depth_statistics(valid_depths)
+        filtered_depths = self._reject_outliers(valid_depths, depth_stats)
+
+        if len(filtered_depths) < 3:
+            return None
+
+        final_depth = float(np.median(filtered_depths)) / 1000.0  # to meters
+
+        # cal conf
+        valid_ratio = len(valid_depths) / roi.size
+        confidence = self._calculate_depth_confidence(
+            filtered_depths, depth_stats, valid_ratio
+        )
+        confidence *= quality_score  # factor in quality score
+
+        roi_stats = {
+            'roi_size': roi.size,
+            'valid_pixels': len(valid_depths),
+            'valid_ratio': valid_ratio,
+            'quality_score': quality_score,
+            'depth_std': depth_stats['std'] / 1000.0,
+            'outliers_removed': len(valid_depths) - len(filtered_depths)
+        }
+
+        return final_depth, confidence, roi_stats
+
+    async def _extract_expanded_roi_depth(
+            self,
+            bbox: Tuple[int, int, int, int],
+            depth_image: np.ndarray,
+    ) -> Optional[Tuple[float, float, Dict[str, Any]]]:
+        """Extract depth from expanded 60% ROI (fallback method)."""
+        roi = self._get_roi_from_bbox(bbox, depth_image, size_factor=0.6)
+        if roi is None:
+            return None
+
+        # Check quality
+        is_valid, quality_score, reason = self.quality_checker.check_depth_quality(roi)
+        if not is_valid:
+            return None
+
+        min_depth = self.config.depth_range.min * 1000
+        max_depth = self.config.depth_range.max * 1000
+        valid_depths = roi[(roi > min_depth) & (roi < max_depth)]
+
+        if len(valid_depths) < 10:  # Need more pixels for expanded ROI
+            return None
+
+        depth_stats = self._calculate_depth_statistics(valid_depths)
+        filtered_depths = self._reject_outliers(valid_depths, depth_stats)
+
+        if len(filtered_depths) < 5:
+            return None
+
+        final_depth = float(np.median(filtered_depths)) / 1000.0
+
+        valid_ratio = len(valid_depths) / roi.size
+        confidence = self._calculate_depth_confidence(
+            filtered_depths, depth_stats, valid_ratio
+        )
+        confidence *= quality_score * 0.85  # Penalty for using fallback method
+
+        roi_stats = {
+            'roi_size': roi.size,
+            'valid_pixels': len(valid_depths),
+            'valid_ratio': valid_ratio,
+            'quality_score': quality_score,
+            'depth_std': depth_stats['std'] / 1000.0,
+            'outliers_removed': len(valid_depths) - len(filtered_depths)
+        }
+
+        return final_depth, confidence, roi_stats
+
+    async def _extract_statistical_depth(
+            self,
+            bbox: Tuple[int, int, int, int],
+            depth_image: np.ndarray
+    ) -> Optional[Tuple[float, float, Dict[str, Any]]]:
+        """Extract depth using aggressive statistical filtering (uses full bbox)."""
+
+        # Use full bbox
+        x1, y1, x2, y2 = bbox
+        x1, y1 = max(0, x1), max(0, y1)
+        x2 = min(depth_image.shape[1], x2)
+        y2 = min(depth_image.shape[0], y2)
+
+        roi = depth_image[y1:y2, x1:x2]
+        if roi.size == 0:
+            return None
+
+        # Get valid depths
+        min_depth = self.config.depth_range.min * 1000
+        max_depth = self.config.depth_range.max * 1000
+        valid_depths = roi[(roi > min_depth) & (roi < max_depth)]
+
+        if len(valid_depths) < 20:  # Need significant data
+            return None
+
+        # More aggressive outlier removal
+        depth_stats = self._calculate_depth_statistics(valid_depths)
+
+        # Use stricter sigma
+        mean_depth = depth_stats['mean']
+        std_depth = depth_stats['std']
+        threshold = 1.5 * std_depth  # Stricter than normal 2.0
+
+        mask = np.abs(valid_depths - mean_depth) < threshold
+        filtered_depths = valid_depths[mask]
+
+        if len(filtered_depths) < 10:
+            return None
+
+        final_depth = float(np.median(filtered_depths)) / 1000.0
+
+        # Lower confidence due to aggressive filtering
+        valid_ratio = len(valid_depths) / roi.size
+        confidence = min(0.7, valid_ratio * 0.8)
+
+        roi_stats = {
+            'roi_size': roi.size,
+            'valid_pixels': len(valid_depths),
+            'valid_ratio': valid_ratio,
+            'quality_score': 0.6,
+            'depth_std': depth_stats['std'] / 1000.0,
+            'outliers_removed': len(valid_depths) - len(filtered_depths)
+        }
+
+        return final_depth, confidence, roi_stats
+
+    def _estimate_depth_from_bbox(
+            self,
+            bbox: Tuple[int, int, int, int],
+            depth_image: np.ndarray,
+    ) -> Optional[Tuple[float, float, Dict[str, Any]]]:
+        """Estimate depth from bbox --> by assuming human height ~= 1.7m"""
+
+        x1, y1, x2, y2 = bbox
+        bbox_height_pixels = y2 - y1
+
+        if bbox_height_pixels < 50:
+            return None
+
+        if not self.intrinsics_received:
+            return None
+
+        # estimate: person height / bbox height ≈ distance
+        estimated_distance = (1.7 * self.intrinsics.fy) / bbox_height_pixels
+
+        confidence = 0.3  # low since estimate
+
+        roi_stats = {
+            'roi_size': 0,
+            'valid_pixels': 0,
+            'valid_ratio': 0.0,
+            'quality_score': 0.3,
+            'depth_std': 0.0,
+            'outliers_removed': 0,
+            'bbox_height_pixels': bbox_height_pixels,
+            'estimation_method': 'bbox_size'
+        }
+
+        return estimated_distance, confidence, roi_stats
+
+    async def _extract_depth_multi_level(
+            self,
+            bbox: Tuple[int, int, int, int],
+            depth_image: np.ndarray,
+    ) -> Optional[Tuple[float, float, Dict[str, Any], str]]:
+        """multi-level depth extraction with fallbacks"""
+
+        # Extraction levels:
+        #         1. Center ROI (40% of bbox) - Most reliable
+        #         2. Expanded ROI (60% of bbox) - Fallback if center fails
+        #         3. Statistical filtering - Aggressive filtering on full bbox
+        #         4. Bbox-based estimate - Last resort
+
+        # Lvl 1: Center ROI --> most reliable
+        result = await self._extract_center_roi_depth(bbox, depth_image)
+        if result is not None:
+            depth, confidence, stats = result
+            stats['extraction_level'] = 1
+            self.processing_stats['extraction_method_counts']['center_roi'] += 1
+            return depth, confidence, stats, "center_roi"
+
+        # Lvl 2: Expanded ROI
+        result = await self._extract_expanded_roi_depth(bbox, depth_image)
+        if result is not None:
+            depth, confidence, stats = result
+            stats['extraction_level'] = 2
+            self.processing_stats['extraction_method_counts']['expanded_roi'] += 1
+            return depth, confidence, stats, "expanded_roi"
+
+        # Lvl 3: Statistical filtering with full bbox
+        result = await self._extract_statistical_depth(bbox, depth_image)
+        if result is not None:
+            depth, confidence, stats = result
+            stats['extraction_level'] = 3
+            self.processing_stats['extraction_method_counts']['statistical'] += 1
+            return depth, confidence, stats, "statistical"
+
+        # Lvl 4: Estimate if everything fails
+        result = self._estimate_depth_from_bbox(bbox, depth_image)
+        if result is not None:
+            depth, confidence, stats = result
+            stats['extraction_level'] = 4
+            self.processing_stats['extraction_method_counts']['fallback_estimate'] += 1
+            return depth, confidence, stats, "fallback_estimate"
+
+        # if all levels failed
+        self.processing_stats['failed_extractions'] += 1
+        return None
+
     async def extract_multiple_depths(
             self,
             bboxes: List[Tuple[int, int, int, int]],
             depth_image: Optional[np.ndarray] = None
     ) -> List[Optional[DepthData]]:
-        """Extract depth values from multiple bboxes"""
+        """Extract depth values from multiple bboxes concurrently"""
 
         if not bboxes:
             return []
 
         tasks = [
-             await self.extract_person_depth(bbox, depth_image) for bbox in bboxes
+            self.extract_person_depth(bbox, depth_image) for bbox in bboxes
         ]
 
-        #extract all extractions concurrently
+        # extract all extractions concurrently
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        #process results, handling exceptions
+        # process results, handling exceptions
         depth_results = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
@@ -452,6 +826,15 @@ class DepthProcessor:
                 depth_results.append(None)
             else:
                 depth_results.append(result)
+
+        #log batch statistics
+        successful = sum(1 for r in depth_results if r is not None)
+        logger.debug(
+            "batch_depth_extraction_complete",
+            total=len(bboxes),
+            successful=successful,
+            failed=len(bboxes) - successful
+        )
 
         return depth_results
 
@@ -472,9 +855,16 @@ class DepthProcessor:
     def get_performance_stats(self) -> Dict[str, Any]:
         """Return performance statistics."""
         if self.processing_count == 0:
-            return {'processing_count': 0}
+            return {
+                'processing_count': 0,
+                'frames_processed': self.processing_stats['frames_processed']
+            }
 
         avg_time = self.total_processing_time / self.processing_count
+
+        #cal success rate
+        failed = self.processing_stats['failed_extractions']
+        success_rate = ((self.processing_count - failed) / self.processing_count * 100) if self.processing_count > 0 else 0
 
         return {
             'processing_count': self.processing_count,
@@ -482,7 +872,11 @@ class DepthProcessor:
             'total_processing_time_ms': round(self.total_processing_time, 2),
             'target_time_ms': self.settings.testing.performance_benchmarks.depth_processing_ms,
             'intrinsics_available': self.intrinsics_received,
-            'latest_depth_age_ms': round((time.time() - self.depth_timestamp) * 1000, 1) if self.depth_timestamp > 0 else None
+            'latest_depth_age_ms': round((time.time() - self.depth_timestamp) * 1000, 1) if self.depth_timestamp > 0 else None,
+            'frames_processed': self.processing_stats['frames_processed'],
+            'failed_extractions': failed,
+            'success_rate_percent': round(success_rate, 1),
+            'extraction_methods': self.processing_stats['extraction_method_counts']
         }
 
     def set_depth_image(self, depth_image: np.ndarray) -> None:
@@ -580,11 +974,3 @@ async def extract_person_depth(
     processor.set_depth_image(depth_image)
 
     return await processor.extract_person_depth(bbox)
-
-
-
-
-
-
-
-
