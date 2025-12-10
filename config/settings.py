@@ -231,6 +231,31 @@ class PhotoCaptureConfig(BaseModel):
     workflow: WorkflowConfig = Field(default_factory=WorkflowConfig)
     activation: ActivationConfig = Field(default_factory=ActivationConfig)
 
+class ROS2TopicsConfig(BaseModel):
+    """ROS2 topics configs"""
+    # Input topics
+    realsense_depth: str = "/camera/aligned_depth_to_color/image_raw"
+    realsense_camera_info: str = "/camera/aligned_depth_to_color/camera_info"
+    joint_states: str = "/joint_states"
+    activation_trigger: str = "/va_photo_capture"
+
+    # Output topics
+    gimbal_commands: str = "/gimbal_controller/commands"
+    focus_commands: str = "/set_focus_position"
+    capture_trigger: str = "/capture_image_topic"
+    tts_output: str = "/tts_text_output"
+
+    # Status topics
+    system_status: str = "/photo_capture/status"
+    detection_debug: str = "/photo_capture/detections"
+
+class ControlTimingConfig(BaseModel):
+    """Control timing configs"""
+    main_loop_hz: float = Field(5.0, gt=0, le=30)
+    vision_processing_hz: float = Field(10.0, gt=0, le=60)
+    depth_processing_hz: float = Field(5.0, gt=0, le=30)
+    position_update_hz: float = Field(5.0, gt=0, le=30)
+
 class Settings(BaseModel):
     """Main settings class"""
 
@@ -242,6 +267,12 @@ class Settings(BaseModel):
     logging: LoggingConfig = Field(default_factory=LoggingConfig)
     threading: ThreadingConfig = Field(default_factory=ThreadingConfig)
     testing: TestingConfig = Field(default_factory=TestingConfig)
+    positioning: PositioningConfig = Field(default_factory=PositioningConfig)
+    camera_control: CameraControlConfig = Field(default_factory=CameraControlConfig)
+    photo_capture: PhotoCaptureConfig = Field(default_factory=PhotoCaptureConfig)
+    ros2_topics: ROS2TopicsConfig = Field(default_factory=ROS2TopicsConfig)
+    control_timing: ControlTimingConfig = Field(default_factory=ControlTimingConfig)
+
 
     @classmethod
     def from_yaml(cls, config_path: str) -> 'Settings':

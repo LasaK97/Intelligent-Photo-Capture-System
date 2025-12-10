@@ -159,22 +159,22 @@ class DepthProcessor:
 
         self.depth_subscription = self.node.create_subscription(
             Image,
-            self.config.depth_topic,
+            self.settings.ros2_topics.realsense_depth,
             self._depth_callback,
             10
         )
 
         self.camera_info_subscription = self.node.create_subscription(
             CameraInfo,
-            self.config.camera_info_topic,
+            self.settings.ros2_topics.realsense_camera_info,
             self._camera_info_callback,
             10
         )
 
         logger.info(
-            "ros_subscriptions_created",
-            depth_topic=self.config.depth_topic,
-            camera_info_topic=self.config.camera_info_topic
+            "depth_ros_subscriptions_created",
+            depth_topic=self.settings.ros2_topics.realsense_depth,
+            camera_info_topic=self.settings.ros2_topics.realsense_camera_info
         )
 
     def _depth_callback(self, msg: Image) -> None:
@@ -183,8 +183,15 @@ class DepthProcessor:
             #convert ros image to numpy array
             depth_image = self.bridge.imgmsg_to_cv2(msg, desired_encoding="16UC1")
 
+            if not self._validate_depth_image(depth_image):
+                logger.warning("invalid_depth_image_received")
+                return
+
             self.latest_depth_image = depth_image
             self.depth_timestamp = time.time()
+
+            #update processing stats
+            self.processing_stats['frames_processed'] += 1
 
             logger.debug("depth_image_received", shape=depth_image.shape, encoding=msg.encoding)
         except Exception as e:
