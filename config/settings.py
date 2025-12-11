@@ -226,10 +226,51 @@ class ActivationConfig(BaseModel):
     trigger_message: str = "y"
     auto_start: bool = False
 
+
+class SceneClassificationConfig(BaseModel):
+    """Scene classification configuration"""
+    enabled: bool = True
+
+    class DistanceRange(BaseModel):
+        """Distance range for a scene type"""
+        min_distance: float
+        max_distance: float
+        optimal_distance: float
+        max_horizontal_spread: Optional[float] = None
+
+    class CompositionPadding(BaseModel):
+        """Composition padding for framing"""
+        horizontal: float
+        vertical: float
+
+    class CompositionPaddingConfig(BaseModel):
+        """Composition padding for all scene types"""
+        portrait: 'SceneClassificationConfig.CompositionPadding'
+        couple: 'SceneClassificationConfig.CompositionPadding'
+        small_group: 'SceneClassificationConfig.CompositionPadding'
+        medium_group: 'SceneClassificationConfig.CompositionPadding'
+        large_group: 'SceneClassificationConfig.CompositionPadding'
+
+    class DistanceRanges(BaseModel):
+        """Distance ranges for all scene types"""
+        portrait: 'SceneClassificationConfig.DistanceRange'
+        couple: 'SceneClassificationConfig.DistanceRange'
+        small_group: 'SceneClassificationConfig.DistanceRange'
+        medium_group: 'SceneClassificationConfig.DistanceRange'
+        large_group: 'SceneClassificationConfig.DistanceRange'
+
+    distance_ranges: DistanceRanges
+    composition_padding: Dict[str, CompositionPaddingConfig] = Field(
+        default_factory=dict,
+        description="Composition padding configuration"
+    )
+
 class PhotoCaptureConfig(BaseModel):
     """Photo capture configs"""
     workflow: WorkflowConfig = Field(default_factory=WorkflowConfig)
     activation: ActivationConfig = Field(default_factory=ActivationConfig)
+    scene_classification: SceneClassificationConfig = Field(default_factory=SceneClassificationConfig)
+
 
 class ROS2TopicsConfig(BaseModel):
     """ROS2 topics configs"""
@@ -305,8 +346,139 @@ class Settings(BaseModel):
             raise ValueError(f"YOLO model not found: {model_path}")
         return self
 
+    ## Photo capture.yaml validations
 
-#global settings
+class StateConfig(BaseModel):
+    """Individual state configs"""
+    description: str
+    timeout_s: Optional[float] = None
+    actions: Optional[List[str]] = None
+    min_detection_time_s: Optional[float] = None
+    min_person_confidence: Optional[float] = None
+    max_guidance_attempts: Optional[int] = None
+    position_tolerance_m: Optional[float] = None
+    required_checks: Optional[List[str]] = None
+    duration_s: Optional[float] = None
+    display_time_s: Optional[float] = None
+
+class WorkflowStatesConfig(BaseModel):
+    """Workflow states configs"""
+    idle: StateConfig
+    initializing: StateConfig
+    detecting: StateConfig
+    positioning: StateConfig
+    adjusting_camera: StateConfig
+    verifying: StateConfig
+    countdown: StateConfig
+    capturing: StateConfig
+    complete: StateConfig
+
+class WorkflowConfig(BaseModel):
+    """Workflow configs"""
+    states: WorkflowStatesConfig = Field(default_factory=WorkflowStatesConfig)
+
+class VoiceGuidanceMessages(BaseModel):
+    """VoiceGuidance messages"""
+    welcome: str
+    single_person_detected: str
+    couple_detected: str
+    group_detected: str
+    move_closer: str
+    move_further: str
+    move_left: str
+    move_right: str
+    move_together: str
+    spread_out: str
+    perfect_position: str
+    countdown_start: str
+    countdown_numbers: List[str]
+    capture_complete: str
+    timeout_warning: str
+
+class VoiceGuidanceTiming(BaseModel):
+    """voice guidance timings"""
+    message_interval_s: float = 2.0
+    position_update_interval_s: float = 3.0
+
+class SubjectPositioning(BaseModel):
+    """subject positioning preferences"""
+    vertical_center_offset: float = 0.1
+    horizontal_tolerance: float = 0.05
+
+class QualityChecks(BaseModel):
+    """Quality checks requirements"""
+    min_face_size_pixels: int = 80
+    max_motion_blur_threshold: float = 5.0
+    min_contrast_level: float = 0.3
+
+class VoiceGuidanceConfig(BaseModel):
+    """VoiceGuidance configs"""
+    language: str = "en"
+    message: VoiceGuidanceMessages = Field(default_factory=VoiceGuidanceMessages)
+    timing: VoiceGuidanceTiming = Field(default_factory=VoiceGuidanceTiming)
+    subject_positioning: SubjectPositioning = Field(default_factory=SubjectPositioning)
+    quality_checks: QualityChecks = Field(default_factory=QualityChecks)
+
+class DepthFailures(BaseModel):
+    """Depth failures handling"""
+    max_consecutive_failures: int = 5
+    fallback_to_estimation: bool = True
+    estimation_method: str = "bbox_scaling"
+
+class DetectionFailures(BaseModel):
+    """Detection failures handling"""
+    max_no_detection_time_s: float = 5.0
+    recovery_actions: List[str]
+
+class ControlFailures(BaseModel):
+    """Control failures handling"""
+    gimbal_timeout_recovery: str = "return_to_home"
+    focus_timeout_recovery: str = "use_hyperfocal"
+    max_recovery_attempts: int = 3
+
+class SystemFailures(BaseModel):
+    """System failure handling"""
+    critical_component_timeout_s: float = 10.0
+    emergency_shutdown_enabled: bool = True
+    auto_restart_attempts: int = 2
+
+class ErrorHandlingConfig(BaseModel):
+    """Error handling configs"""
+    depth_failures: DepthFailures = Field(default_factory=DepthFailures)
+    detection_failures: DetectionFailures = Field(default_factory=DetectionFailures)
+    control_failures: ControlFailures = Field(default_factory=ControlFailures)
+    system_failures: SystemFailures = Field(default_factory=SystemFailures)
+
+class PhotoWorkflowConfig(BaseModel):
+    """Photo workflow configs """
+
+    model_config = ConfigDict(extra="ignore")
+
+    workflow: WorkflowConfig
+    voice_guidance: VoiceGuidanceConfig
+    error_handling: ErrorHandlingConfig
+
+    @classmethod
+    def from_yaml(cls, config_path: str) -> "PhotoWorkflowConfig":
+        """Load workflow config from YAML file"""
+        path = Path(config_path)
+
+        if not path.exists():
+            raise FileNotFoundError(f"Workflow config file does not exist: {config_path}")
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                config_data = yaml.safe_load(f)
+        except yaml.YAMLError as exc:
+            raise ValueError(f"Invalid YAML config: {exc}")
+
+        if not isinstance(config_data, dict):
+            raise ValueError(f"Config must be a dict: {type(config_data)}")
+
+        return cls(**config_data)
+
+
+#global settings  --> config.yaml
 _settings: Optional[Settings] = None
 
 def get_settings() -> Settings:
@@ -349,3 +521,25 @@ def get_production_settings() -> Settings:
         })
     return settings
 
+
+# #global settings  --> photo_capture.yaml
+
+_workflow_config: Optional[PhotoWorkflowConfig] = None
+
+
+def get_workflow_config() -> PhotoWorkflowConfig:
+    """Get global photo workflow config"""
+    global _workflow_config
+    if _workflow_config is None:
+        config_path = os.getenv("WORKFLOW_CONFIG_PATH", "config/photo_capture.yaml")
+        _workflow_config = PhotoWorkflowConfig.from_yaml(config_path)
+    return _workflow_config
+
+
+def reload_workflow_config(config_path: Optional[str] = None) -> PhotoWorkflowConfig:
+    """Reload photo workflow config"""
+    global _workflow_config
+    if config_path is None:
+        config_path = os.getenv("WORKFLOW_CONFIG_PATH", "config/photo_capture.yaml")
+    _workflow_config = PhotoWorkflowConfig.from_yaml(config_path)
+    return _workflow_config
