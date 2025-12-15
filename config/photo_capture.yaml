@@ -56,21 +56,77 @@ voice_guidance:
   language: "en"
 
   messages:
-    welcome: "Sure! Please come in front of me for your photo"
-    single_person_detected: "Great! I can see you. Please move to the center"
-    couple_detected: "Perfect! I can see both of you. Please move closer together"
-    group_detected: "Wonderful! I can see your group. Please gather closer"
-    move_closer: "Please step a bit closer to me"
-    move_further: "Please step back a little"
-    move_left: "Please move slightly to your left"
-    move_right: "Please move slightly to your right"
-    move_together: "Please move closer together"
-    spread_out: "Please spread out a little more"
-    perfect_position: "Perfect! Please stay still"
-    countdown_start: "Get ready! Photo in"
+    welcome:
+      - "Hello! Please come in front of me for your photo"
+      - "Hi there! Step in front of the camera please"
+      - "Welcome! Let's take your photo"
+
+    single_person_detected:
+      - "Great! I can see you. Please move to the center"
+      - "Perfect! I've got you in frame"
+      - "Excellent! You're looking good"
+
+    couple_detected:
+      - "Perfect! I can see both of you. Please move closer together"
+      - "Great! Both of you are in frame"
+      - "Wonderful! I can see you both"
+
+    group_detected:
+      - "Wonderful! I can see your group. Please gather closer"
+      - "Excellent! Your whole group is here"
+      - "Perfect! Everyone's in the frame"
+
+    move_closer:
+      - "Please step a bit closer to me"
+      - "Can you come a little closer?"
+      - "Move forward just a bit please"
+
+    move_further:
+      - "Please step back a little"
+      - "Take a small step back please"
+      - "Move back just a bit"
+
+    move_left:
+      - "Please move slightly to your left"
+      - "Shift a bit to your left"
+      - "Step left a little please"
+
+    move_right:
+      - "Please move slightly to your right"
+      - "Shift a bit to your right"
+      - "Step right a little please"
+
+    move_together:
+      - "Please move closer together"
+      - "Gather in a bit more"
+      - "Get a little closer to each other"
+
+    spread_out:
+      - "Please spread out a little more"
+      - "Give each other a bit more space"
+      - "Spread out just a bit"
+
+    perfect_position:
+      - "Perfect! Please stay still"
+      - "Excellent! Hold that position"
+      - "Great! Don't move"
+
+    countdown_start:
+      - "Get ready! Photo in"
+      - "Here we go! Photo in"
+      - "Smile! Photo in"
+
     countdown_numbers: ["3", "2", "1"]
-    capture_complete: "Great photo! Thank you!"
-    timeout_warning: "I'm having trouble seeing you clearly. Please try again"
+
+    capture_complete:
+      - "Great photo! Thank you!"
+      - "Perfect! All done!"
+      - "Wonderful! Got it!"
+
+    timeout_warning:
+      - "I'm having trouble seeing you clearly. Please try again"
+      - "Let's try that again please"
+      - "Having some difficulty. One more time please"
 
   timing:
     message_interval_s: 2.0         # Minimum time between messages

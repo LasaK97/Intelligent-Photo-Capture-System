@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import List, Tuple, Optional, Literal, Dict, Any
+from typing import List, Tuple, Optional, Literal, Dict, Any, Union
 from pydantic import BaseModel, Field, field_validator, model_validator, ConfigDict
 from pydantic_settings import BaseSettings
 import yaml
@@ -373,27 +373,27 @@ class WorkflowStatesConfig(BaseModel):
     capturing: StateConfig
     complete: StateConfig
 
-class WorkflowConfig(BaseModel):
+class WorkflowStatesWrapperConfig(BaseModel):
     """Workflow configs"""
     states: WorkflowStatesConfig = Field(default_factory=WorkflowStatesConfig)
 
 class VoiceGuidanceMessages(BaseModel):
-    """VoiceGuidance messages"""
-    welcome: str
-    single_person_detected: str
-    couple_detected: str
-    group_detected: str
-    move_closer: str
-    move_further: str
-    move_left: str
-    move_right: str
-    move_together: str
-    spread_out: str
-    perfect_position: str
-    countdown_start: str
+    """Voice guidance messages configs"""
+    welcome: Union[str, List[str]]
+    single_person_detected: Union[str, List[str]]
+    couple_detected: Union[str, List[str]]
+    group_detected: Union[str, List[str]]
+    move_closer: Union[str, List[str]]
+    move_further: Union[str, List[str]]
+    move_left: Union[str, List[str]]
+    move_right: Union[str, List[str]]
+    move_together: Union[str, List[str]]
+    spread_out: Union[str, List[str]]
+    perfect_position: Union[str, List[str]]
+    countdown_start: Union[str, List[str]]
     countdown_numbers: List[str]
-    capture_complete: str
-    timeout_warning: str
+    capture_complete: Union[str, List[str]]
+    timeout_warning: Union[str, List[str]]
 
 class VoiceGuidanceTiming(BaseModel):
     """voice guidance timings"""
@@ -414,7 +414,7 @@ class QualityChecks(BaseModel):
 class VoiceGuidanceConfig(BaseModel):
     """VoiceGuidance configs"""
     language: str = "en"
-    message: VoiceGuidanceMessages = Field(default_factory=VoiceGuidanceMessages)
+    messages: VoiceGuidanceMessages = Field(default_factory=VoiceGuidanceMessages)
     timing: VoiceGuidanceTiming = Field(default_factory=VoiceGuidanceTiming)
     subject_positioning: SubjectPositioning = Field(default_factory=SubjectPositioning)
     quality_checks: QualityChecks = Field(default_factory=QualityChecks)
@@ -454,7 +454,7 @@ class PhotoWorkflowConfig(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    workflow: WorkflowConfig
+    workflow: WorkflowStatesWrapperConfig
     voice_guidance: VoiceGuidanceConfig
     error_handling: ErrorHandlingConfig
 

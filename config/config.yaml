@@ -240,7 +240,7 @@ ros2_topics:
 
   # Status Topics
   system_status: "/photo_capture/status"
-  detection_debug:
+  detection_debug: "/detection/debug"
 
 # Control Loop Timing
 control_timing:
