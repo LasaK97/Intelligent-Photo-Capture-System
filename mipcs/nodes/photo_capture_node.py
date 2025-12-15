@@ -21,6 +21,7 @@ from geometry_msgs.msg import PointStamped
 from cv_bridge import CvBridge
 from sympy.solvers.ode.riccati import remove_redundant_sols
 from torch._prims import executor
+from dji_rs3pro_ros_controller.msg import GimbalCmd
 
 from ..utils.voice_guidance import VoiceGuidanceMapper
 
@@ -113,7 +114,7 @@ class PhotoCaptureNode(Node):
 
             self.thread_manager = get_thread_manager()
 
-            self.test_timer = self.create_timer(2.0, self.run_integration_test)
+            # self.test_timer = self.create_timer(2.0, self.run_integration_test)
 
             logger.info("all_components_initialized")
         except Exception as e:
@@ -147,7 +148,7 @@ class PhotoCaptureNode(Node):
 
         #publishers
         self.gimbal_cmd_pub = self.create_publisher(
-            String,           # TODO: Implement Float64MultiArray
+            GimbalCmd,           # TODO: Implement Float64MultiArray
             self.settings.ros2_topics.gimbal_commands,
             10
         )
@@ -207,11 +208,13 @@ class PhotoCaptureNode(Node):
         self.vision_thread.start()
 
         #component initialization thread
-        self.int_thread = threading.Thread(
+        self.init_thread = threading.Thread(
             target=self._async_component_initialization,
             daemon=True,
             name="ComponentInit"
         )
+
+        self.init_thread.start()
 
         logger.info("processing_threads_started")
 
@@ -353,18 +356,18 @@ class PhotoCaptureNode(Node):
         else:
             logger.debug("invalid_activation_message", received=msg.data)
 
-    def main_control_loop(self) -> None:
+    async def main_control_loop(self) -> None:
         """Main control loop --> timer callback (5Hz)"""
         try:
             #get latest processing results
             latest_results = None
-            with self.processing_lock:
+            async with self.processing_lock:
                 if self.latest_results is not None:
-                    last_result = self.latest_results
+                    latest_results = self.latest_results
 
             #update state machine
             actions = self.state_machine.update(
-                processing_results=last_result,
+                processing_results=latest_results,
                 current_time=time.time()
             )
 
@@ -482,7 +485,7 @@ class PhotoCaptureNode(Node):
         #call parent dir
         super().destroy_node()
 
-def main(args=Node):
+def main(args=None):
     """main entry point"""
     rclpy.init(args=args)
 

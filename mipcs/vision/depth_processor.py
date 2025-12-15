@@ -275,6 +275,20 @@ class DepthProcessor:
         except Exception as e:
             logger.error("depth_callback_error", error=str(e))
 
+    def _validate_depth_image(self, depth_image: np.ndarray) -> bool:
+        """validate depth image data"""
+        if depth_image is None:
+            return False
+
+        if depth_image.size == 0:
+            return False
+
+        if depth_image.dtype != np.uint16:
+            return False
+
+        return True
+
+
     def _camera_info_callback(self, msg: CameraInfo) -> None:
         """ROS Callback for camera info."""
         try:
@@ -439,8 +453,7 @@ class DepthProcessor:
         # check if we have sufficient valid pixels
         valid_ratio = len(valid_depths) / roi.size
         if valid_ratio < self.config.min_valid_pixels_ratio:
-            logger.debug("insufficient_valid_depth_pixels", valid_ratio=valid_ratio,
-                         required=self.config.min_valid_pixels_ratio)
+            logger.debug("insufficient_valid_depth_pixels", valid_ratio=valid_ratio, required=self.config.min_valid_pixels_ratio)
             return None
 
         # outlier rejection using statistical filtering
