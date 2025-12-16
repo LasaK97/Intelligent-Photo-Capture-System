@@ -92,7 +92,7 @@ class PhotoStateMachine:
         }
 
         #state timeouts (s)
-        self.state_timeout = {
+        self.state_timeouts = {
             PhotoState.INITIALIZING: 10.0,
             PhotoState.DETECTING: 15.0,
             PhotoState.POSITIONING: self.config.workflow.max_positioning_time_s,
@@ -200,7 +200,7 @@ class PhotoStateMachine:
     def _handle_detecting(self) -> Optional[StateAction]:
         """handle detecting state -- looking for people"""
 
-        time_in_state = self.time_int_state()
+        time_in_state = self.time_in_state()
         person_count = len(self.context.person_positions or [])
 
         if person_count > 0:

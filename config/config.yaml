@@ -10,7 +10,7 @@ system:
 vision:
   # YOLO11-pose Detection
   yolo:
-    model_path: "models/yolo11n-pose.engine"
+    model_path: "yolo11n-pose.engine"
     confidence_threshold: 0.6
     iou_threshold: 0.45
     max_detections: 8
@@ -27,7 +27,7 @@ vision:
     model_source:
       base_model:  "yolo11n-pose"  # yolo11n-pose, yolo11s-pose, yolov8n-pose
       download_url: null
-      pt_model_path: "models/yolo11n-pose.pt"   #pytorch model path
+      pt_model_path: "yolo11n-pose.pt"   #pytorch model path
       model_urls:
         "8": "https://github.com/ultralytics/assets/releases/download/v8.3.0/"
         "v8": "https://github.com/ultralytics/assets/releases/download/v8.3.0/"
@@ -227,13 +227,13 @@ camera_control:
 # ROS2 Topic Configuration
 ros2_topics:
   # Input Topics
-  realsense_depth: "/camera/aligned_depth_to_color/image_raw"
-  realsense_camera_info: "/camera/aligned_depth_to_color/camera_info"
+  realsense_depth: "/camera/camera/aligned_depth_to_color/image_raw"
+  realsense_camera_info: "/camera/camera/aligned_depth_to_color/camera_info"
   joint_states: "/joint_states"
   activation_trigger: "/va_photo_capture"
 
   # Output Topics
-  gimbal_commands: "/gimbal_controller/commands"
+  gimbal_commands: "/gimbalCmd"
   focus_commands: "/set_focus_position"
   capture_trigger: "/capture_image_topic"
   tts_output: "/tts_text_output"

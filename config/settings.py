@@ -5,6 +5,101 @@ from pydantic import BaseModel, Field, field_validator, model_validator, ConfigD
 from pydantic_settings import BaseSettings
 import yaml
 
+
+def get_config_path(config_filename: str, env_var: str) -> str:
+    """find configs"""
+    if env_var in os.environ:
+        env_path = Path(os.environ[env_var])
+        if env_path.exists():
+            return str(env_path)
+
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        pkg_share = Path(get_package_share_directory('manriix_photo_va'))
+        ros_config_path = pkg_share / 'config' / config_filename
+        if ros_config_path.exists():
+            return str(ros_config_path)
+    except (ImportError, Exception):
+        # ament_index_python not available or package not found
+        pass
+
+    cwd_config = Path.cwd() / 'config' / config_filename
+    if cwd_config.exists():
+        return str(cwd_config)
+
+    file_dir = Path(__file__).parent
+    dev_config_path = file_dir / config_filename
+    if dev_config_path.exists():
+        return str(dev_config_path)
+
+    # Priority 5: Check parent directory (in case running from subdirectory)
+    parent_config = file_dir.parent / 'config' / config_filename
+    if parent_config.exists():
+        return str(parent_config)
+
+    # If still not found, raise helpful error
+    searched_paths = [
+        f"Environment variable: {env_var}",
+        "ROS2 package share directory",
+        f"Current working directory: {cwd_config}",
+        f"Development directory: {dev_config_path}",
+        f"Parent config directory: {parent_config}"
+    ]
+
+    raise FileNotFoundError(
+        f"Config file '{config_filename}' not found. Searched:\n" +
+        "\n".join(f"  - {p}" for p in searched_paths)
+    )
+
+
+def get_model_path(model_filename: str, env_var: str = 'MODELS_PATH') -> str:
+    """Find model files using same priority as get_config_path"""
+
+    if env_var in os.environ:
+        env_path = Path(os.environ[env_var])
+        if env_path.is_dir():
+            model_path = env_path / model_filename
+            if model_path.exists():
+                return str(model_path)
+        elif env_path.exists() and env_path.name == model_filename:
+            return str(env_path)
+
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        pkg_share = Path(get_package_share_directory('manriix_photo_va'))
+        ros_model_path = pkg_share / 'models' / model_filename
+        if ros_model_path.exists():
+            return str(ros_model_path)
+    except (ImportError, Exception):
+        pass
+
+    cwd_model = Path.cwd() / 'models' / model_filename
+    if cwd_model.exists():
+        return str(cwd_model)
+
+    file_dir = Path(__file__).parent
+    dev_model_path = file_dir.parent / 'models' / model_filename
+    if dev_model_path.exists():
+        return str(dev_model_path)
+
+    parent_model = file_dir.parent.parent / 'models' / model_filename
+    if parent_model.exists():
+        return str(parent_model)
+
+    searched_paths = [
+        f"Environment variable: {env_var}",
+        "ROS2 package share directory",
+        f"Current working directory: {cwd_model}",
+        f"Development directory: {dev_model_path}",
+        f"Parent directory: {parent_model}"
+    ]
+
+    raise FileNotFoundError(
+        f"Model file '{model_filename}' not found. Searched:\n" +
+        "\n".join(f"  - {p}" for p in searched_paths)
+    )
+
+
 class ModelSource(BaseModel):
     """Yolo download and conversion settings"""
     base_model: str = Field(..., description="Base YOLO model name")
@@ -59,7 +154,24 @@ class YOLOConfig(BaseModel):
     def validate_model_path(cls, v: str) -> str:
         if not Path(v).suffix == '.engine':
             raise ValueError(f'Invalid model-[Model must be a TensorRT engine]: {v}')
-        return v
+        try:
+            filename = Path(v).name
+            return get_model_path(filename)
+        except FileNotFoundError:
+            import warnings
+            warnings.warn(f"Model file not found: {v}.")
+            return v
+
+    @model_validator(mode='after')
+    def resolve_pt_model_path(self) -> 'YOLOConfig':
+        """Resolve PT model path in model_source"""
+        if hasattr(self.model_source, 'pt_model_path'):
+            try:
+                filename = Path(self.model_source.pt_model_path).name
+                self.model_source.pt_model_path = get_model_path(filename)
+            except FileNotFoundError:
+                pass
+        return self
 
     @model_validator(mode='after')
     def validate_input_sizes_match(self) -> 'YOLOConfig':
@@ -176,11 +288,16 @@ class PositioningFiltering(BaseModel):
     max_position_change_per_frame: float = Field(default=0.2, gt=0, description="Max position change per frame in meters")
     outlier_rejection_sigma: float = Field(default=2.0, gt=0, description="Outlier rejection sigma")
 
+class GroundPlane(BaseModel):
+    """Ground plane detection configs"""
+    detection_method: str = "fixed_height"  # or "ransac"
+
 class PositioningConfig(BaseModel):
     """3D Positioning configs"""
     coordinate_system: str = "camera_frame"
     camera_mounting: CameraMounting = Field(default_factory=CameraMounting)
     positioning_filtering: PositioningFiltering = Field(default_factory=PositioningFiltering)
+    ground_plane: GroundPlane = Field(default_factory=GroundPlane)
 
 class GimbalConfig(BaseModel):
     """Gimbal configs"""
@@ -487,7 +604,7 @@ def get_settings() -> Settings:
     """
     global _settings
     if _settings is None:
-        config_path = os.getenv("CONFIG_PATH", "config/config.yaml")
+        config_path = get_config_path('config.yaml', 'CONFIG_PATH')
         _settings = Settings.from_yaml(config_path)
     return _settings
 
@@ -495,7 +612,7 @@ def reload_settings(config_path: Optional[str] = None) -> Settings:
     """Reload global settings"""
     global _settings
     if config_path is None:
-        config_path = os.getenv("CONFIG_PATH", "config/config.yaml")
+        config_path =  get_config_path('config.yaml', 'CONFIG_PATH')
     _settings = Settings.from_yaml(config_path)
     return _settings
 
@@ -531,7 +648,7 @@ def get_workflow_config() -> PhotoWorkflowConfig:
     """Get global photo workflow config"""
     global _workflow_config
     if _workflow_config is None:
-        config_path = os.getenv("WORKFLOW_CONFIG_PATH", "config/photo_capture.yaml")
+        config_path = get_config_path('photo_capture.yaml', 'WORKFLOW_CONFIG_PATH')
         _workflow_config = PhotoWorkflowConfig.from_yaml(config_path)
     return _workflow_config
 
@@ -540,6 +657,6 @@ def reload_workflow_config(config_path: Optional[str] = None) -> PhotoWorkflowCo
     """Reload photo workflow config"""
     global _workflow_config
     if config_path is None:
-        config_path = os.getenv("WORKFLOW_CONFIG_PATH", "config/photo_capture.yaml")
+        config_path = get_config_path('photo_capture.yaml', 'WORKFLOW_CONFIG_PATH')
     _workflow_config = PhotoWorkflowConfig.from_yaml(config_path)
     return _workflow_config

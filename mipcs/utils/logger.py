@@ -173,6 +173,9 @@ def setup_logging() -> FilteringBoundLogger:
     if settings.logging.console_output:
         stdlib_logger.addHandler(console_handler)
 
+    logging.root.setLevel(getattr(logging, settings.logging.level))
+    for name in list(logging.Logger.manager.loggerDict):
+        logging.getLogger(name).setLevel(getattr(logging, settings.logging.level))
 
     #config structlog
     structlog.configure(
@@ -193,7 +196,7 @@ def setup_logging() -> FilteringBoundLogger:
         context_class=dict,
         wrapper_class=structlog.stdlib.BoundLogger,
         logger_factory=structlog.stdlib.LoggerFactory(),
-        cache_logger_on_first_use=True
+        cache_logger_on_first_use=False
     )
 
     return structlog.get_logger(logger_name=settings.system.name)
@@ -202,6 +205,9 @@ def get_logger(name: str = None) -> FilteringBoundLogger:
     """Get logger instance"""
     _settings = get_settings()
     logger_name = name or _settings.system.name
+    stdlib_logger = logging.getLogger(logger_name)
+    stdlib_logger.setLevel(getattr(logging, _settings.logging.level))
+
     return structlog.get_logger(logger_name=logger_name)
 
 def log_performance(operation: str):
