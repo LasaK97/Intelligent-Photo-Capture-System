@@ -185,6 +185,15 @@ photo_capture:
 positioning:
   coordinate_system: "camera_frame"
 
+  frames:
+    camera_optical: "camera_color_optical_frame"
+    camera_link: "camera_link"
+    base_link: "base_link"
+    base_footprint: "base_footprint"
+
+  use_dynamic_transforms: true
+  transform_cache_duration: 1.0
+
   camera_mounting:
     height_from_ground: 1.68 #m
     tilt_angle_deg: 0.0 #degrees (+ = down)

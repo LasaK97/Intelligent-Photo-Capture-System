@@ -288,6 +288,25 @@ class PositioningFiltering(BaseModel):
     max_position_change_per_frame: float = Field(default=0.2, gt=0, description="Max position change per frame in meters")
     outlier_rejection_sigma: float = Field(default=2.0, gt=0, description="Outlier rejection sigma")
 
+class FrameConfig(BaseModel):
+    """Coordinate frame names for TF lookups"""
+    camera_optical: str = Field(
+        default="camera_color_optical_frame",
+        description="Camera optical frame name"
+    )
+    camera_link: str = Field(
+        default="camera_link",
+        description="Camera link frame name"
+    )
+    base_link: str = Field(
+        default="base_link",
+        description="Robot base link frame name"
+    )
+    base_footprint: str = Field(
+        default="base_footprint",
+        description="Robot base footprint frame name"
+    )
+
 class GroundPlane(BaseModel):
     """Ground plane detection configs"""
     detection_method: str = "fixed_height"  # or "ransac"
@@ -298,6 +317,20 @@ class PositioningConfig(BaseModel):
     camera_mounting: CameraMounting = Field(default_factory=CameraMounting)
     positioning_filtering: PositioningFiltering = Field(default_factory=PositioningFiltering)
     ground_plane: GroundPlane = Field(default_factory=GroundPlane)
+    frames: FrameConfig = Field(
+        default_factory=FrameConfig,
+        description="Coordinate frame names"
+    )
+    use_dynamic_transforms: bool = Field(
+        default=True,
+        description="Use ROS2 TF for dynamic transforms"
+    )
+    transform_cache_duration: float = Field(
+        default=1.0,
+        ge=0.1,
+        le=10.0,
+        description="Transform cache duration in seconds"
+    )
 
 class GimbalConfig(BaseModel):
     """Gimbal configs"""

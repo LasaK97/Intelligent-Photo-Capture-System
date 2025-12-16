@@ -24,6 +24,9 @@ from config.settings import get_settings
 from ..utils.logger import get_logger, log_performance
 from ..utils.threading_utils import AsyncLock
 from ..utils.exceptions import ControlError, TimeoutError
+from ..positioning.transform_manager import TransformManager
+from ..utils.geometry_utils import Point3D
+
 
 logger = get_logger(__name__)
 
@@ -54,10 +57,15 @@ class FocusMode(Enum):
 class CameraController:
     """Camera controller with gimbal positioning and focus"""
 
-    def __init__(self, node: Node):
+    def __init__(self, node: Node, transform_manager: Optional[TransformManager] = None):
         self.node = node
         self.settings = get_settings()
         self.config = self.settings.camera_control
+
+        self.transform_manager = transform_manager
+        positioning_config = self.settings.positioning
+        self.camera_frame = positioning_config.frames.camera_optical
+        self.base_frame = positioning_config.frames.base_link
 
         #state tracking
         self.gimbal_state = GimbalState(
@@ -119,6 +127,26 @@ class CameraController:
             #cancel the timer
             if hasattr(self, '_action_check_timer'):
                 self._action_check_timer.cancel()
+
+    def get_camera_position(self) -> Optional[Point3D]:
+        """
+        Get current camera position in base_link frame.
+        dynamic lookup --> Uses TransformManager
+        """
+        if self.transform_manager:
+            camera_pos = self.transform_manager.get_camera_position(
+                camera_frame=self.camera_frame,
+                base_frame=self.base_frame
+            )
+            if camera_pos:
+                return camera_pos
+            else:
+                logger.warning("camera_position_not_available_from_tf")
+
+        # Fallback to config values
+        fallback_pos = Point3D(0.2005, 0.0, 0.72354)
+        logger.debug("using_fallback_camera_position")
+        return fallback_pos
 
     def _init_focus_system(self) -> None:
         """Initialise the focus system"""

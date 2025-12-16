@@ -37,6 +37,7 @@ from ..positioning.position_calculator import PositionCalculator, PersonPosition
 from ..positioning.scene_classifier import SceneClassifier, SceneAnalysis
 from ..control.camera_controller import CameraController
 from ..control.state_machine import PhotoStateMachine, PhotoState
+from ..positioning.transform_manager import TransformManager
 
 from config.settings import get_settings, get_workflow_config
 from ..utils.logger import get_logger, log_performance
@@ -102,11 +103,38 @@ class PhotoCaptureNode(Node):
             self.frame_client = CanonFrameClient()
             self.depth_processor = DepthProcessor(node=self)
 
+            # init TransformManager
+            self.transform_manager = TransformManager(
+                node=self,
+                cache_duration=self.settings.positioning.transform_cache_duration,
+                use_tf=self.settings.positioning.use_dynamic_transforms
+            )
+            logger.info("transform_manager_initialized")
+
+            try:
+                camera_pos = self.transform_manager.get_camera_position(
+                    camera_frame=self.settings.positioning.frames.camera_optical,
+                    base_frame=self.settings.positioning.frames.base_link
+                )
+                if camera_pos:
+                    logger.info(
+                        "camera_position_from_tf",
+                        x=f"{camera_pos.x:.4f}",
+                        y=f"{camera_pos.y:.4f}",
+                        z=f"{camera_pos.z:.4f}"
+                    )
+            except Exception as e:
+                logger.warning("camera_position_lookup_failed", error=str(e))
+
             self.position_calculator = PositionCalculator(
                 depth_processor=self.depth_processor,
+                transform_manager=self.transform_manager
             )
             self.scene_classifier = SceneClassifier()
-            self.camera_controller = CameraController(node=self)
+            self.camera_controller = CameraController(
+                node=self,
+                transform_manager=self.transform_manager
+            )
             self.state_machine = PhotoStateMachine()
 
             self.workflow_config = get_workflow_config()
@@ -435,7 +463,8 @@ class PhotoCaptureNode(Node):
             'face_analyzer': getattr(self.face_analyzer, 'models_loaded', False),
             'frame_client': getattr(self.frame_client, 'running', False),
             'depth_processor': getattr(self.depth_processor, 'intrinsics_received', False),
-            'camera_controller': self.camera_controller.is_ready()
+            'camera_controller': self.camera_controller.is_ready(),
+            'transform_manager': hasattr(self, 'transform_manager') and self.transform_manager is not None
         }
 
     def _update_performance_stats(self, result: ProcessingResult) -> None:
@@ -459,6 +488,10 @@ class PhotoCaptureNode(Node):
         try:
             if hasattr(self.frame_client, 'stop'):
                 await self.frame_client.stop()
+
+            if hasattr(self, 'transform_manager'):
+                self.transform_manager.invalidate_cache()
+                logger.debug("transform_manager_cache_cleared")
 
             if hasattr(self.yolo_detector, 'cleanup'):
                 await self.yolo_detector.cleanup()

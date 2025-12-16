@@ -15,6 +15,8 @@ from ..vision.depth_processor import DepthProcessor, DepthData
 from config.settings import get_settings
 from ..utils.logger import get_logger, log_performance
 from ..utils.exceptions import PositionCalculationError, DepthInvalidError
+from ..positioning.transform_manager import TransformManager
+from ..utils.geometry_utils import Point3D
 
 logger = get_logger(__name__)
 
@@ -66,11 +68,16 @@ class PositionFilterState:
 class PositionCalculator:
     """Position calculator"""
 
-    def __init__(self, depth_processor: DepthProcessor):
+    def __init__(self, depth_processor: DepthProcessor, transform_manager: Optional[TransformManager] = None):
 
         self.settings = get_settings()
         self.config = self.settings.positioning
         self.depth_processor = depth_processor
+
+        self.transform_manager = transform_manager
+
+        self.camera_frame = self.config.frames.camera_optical
+        self.base_frame = self.config.frames.base_link
 
         #cam configs
         self.camera_height = self.config.camera_mounting.height_from_ground
@@ -181,23 +188,47 @@ class PositionCalculator:
         else:
             x_corrected, y_corrected, z_corrected = x_cam, y_cam, z_cam
 
+        # transform camera frame → base_link frame
+        if self.transform_manager:
+            camera_point = Point3D(x_corrected, y_corrected, z_corrected)
+            base_point = self.transform_manager.transform_point(
+                camera_point,
+                source_frame=self.camera_frame,
+                target_frame=self.base_frame
+            )
+
+            if base_point:
+                x_base, y_base, z_base = base_point.x, base_point.y, base_point.z
+                coordinate_frame = self.base_frame
+                logger.debug(
+                    "position_transformed_to_base",
+                    camera_pos=(x_corrected, y_corrected, z_corrected),
+                    base_pos=(x_base, y_base, z_base)
+                )
+            else:
+                x_base, y_base, z_base = x_corrected, y_corrected, z_corrected
+                coordinate_frame = self.camera_frame
+                logger.warning("transform_failed_using_camera_frame")
+        else:
+            x_base, y_base, z_base = x_corrected, y_corrected, z_corrected
+            coordinate_frame = self.camera_frame
 
         #height from ground
-        height_from_ground = self._calculate_ground_height(y_corrected)
+        height_from_ground = self._calculate_ground_height(z_base)
 
         #cal angles
-        azimuth = np.arctan2(x_corrected, z_corrected)
-        elevation = np.arctan2(-y_corrected, z_corrected)   # -Y bcz y+ down
+        azimuth = np.arctan2(y_base, x_base)
+        elevation = np.arctan2(z_base - self.camera_height, np.sqrt(x_base**2 + y_base**2))    # Y/X in base frame
 
         #calculate distance
-        distance = np.sqrt(x_corrected ** 2 + y_corrected ** 2 + z_corrected ** 2)
+        distance = np.sqrt(x_base ** 2 + y_base ** 2 + z_base ** 2)
 
         #calculate confidence
         position_confidence = self._calculate_position_confidence(detection, depth_result)
 
 
         position = PersonPosition(
-            position_3d=(x_corrected, y_corrected, z_corrected),
+            position_3d=(x_base, y_base, z_base),
             distance_from_camera=distance,
             height_from_ground=height_from_ground,
             detection=detection,
@@ -207,7 +238,7 @@ class PositionCalculator:
             azimuth_angle=azimuth,
             elevation_angle=elevation,
             timestamp=time.time(),
-            frame_id="camera_frame"
+            frame_id=coordinate_frame
         )
 
         self.processing_stats['positions_calculated'] += 1
