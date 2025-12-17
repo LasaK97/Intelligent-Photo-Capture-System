@@ -1,0 +1,310 @@
+exposure_control:
+  enabled: false  # DEFAULT: false --> Canon Auto mode    | true --> Canon Manual mode
+  strategy: "balanced"  # exposure calculation  -->  strategy: balanced, portrait, sports, landscape
+  use_frame_analysis: true   # use vision-based lighting analysis
+  log_recommendations: true    # log recommendations even when not applying
+
+camera_specs:
+  # sensor specs
+  sensor:
+    type: "full_frame"
+    width_mm: 35.9
+    height_mm: 23.9
+    crop_factor: 1.0
+    circle_of_confusion_mm: 0.03  # Standard for full-frame
+    megapixels: 24.2
+    resolution_width: 6000
+    resolution_height: 4000
+
+  # lens specs
+  lens:
+    model: "RF 24-105mm f/2.8L IS USM Z"
+    focal_length_min: 24  # mm
+    focal_length_max: 105  # mm
+    f_number_min: 2.8   # Maximum aperture (wide open)
+    f_number_max: 22.0  # Minimum aperture (stopped down)
+
+    ### NOTE:
+    # | F-Number | Opening Size | Light Amount      | Common Name                                  |
+    # |----------|--------------|-------------------|----------------------------------------------|
+    # | f/2.8    | LARGE hole   | MORE light        | "Wide open" / "Fast" / "MAXIMUM aperture"    |
+    # | f/22     | SMALL hole   | LESS light        | "Stopped down" / "Slow" / "MINIMUM aperture" |
+
+
+# available aperture values
+    available_apertures:
+      - 2.8
+      - 3.2
+      - 3.5
+      - 4.0
+      - 4.5
+      - 5.0
+      - 5.6
+      - 6.3
+      - 7.1
+      - 8.0
+      - 9.0
+      - 10.0
+      - 11.0
+      - 13.0
+      - 14.0
+      - 16.0
+      - 18.0
+      - 20.0
+      - 22.0
+
+    # image stabilization
+    optical_is_stops: 5.5
+    ibis_coordinated_stops: 8.0
+
+  # ISO specs
+  iso:
+    min: 100
+    max: 102400
+    expanded_min: 50
+    expanded_max: 204800
+
+    # standard ISO values (available)
+    standard_values:
+      - 100
+      - 125
+      - 160
+      - 200
+      - 250
+      - 320
+      - 400
+      - 500
+      - 640
+      - 800
+      - 1000
+      - 1250
+      - 1600
+      - 2000
+      - 2500
+      - 3200
+      - 4000
+      - 5000
+      - 6400
+      - 8000
+      - 10000
+      - 12800
+      - 16000
+      - 20000
+      - 25600
+      - 32000
+      - 40000
+      - 51200
+      - 64000
+      - 80000
+      - 102400
+
+manual_settings:
+  # DEFAULT --> Camera = Auto mode
+  default_aperture: 2.8
+  default_shutter: "1/125"
+  default_iso: 400
+  recommended_camera_mode: "Auto"  # or "P"
+
+preferences:
+  # aperture ranges for different scene types
+  aperture_ranges:
+    portrait_single:
+      min: 2.8
+      max: 4.0
+      preferred: 2.8
+      reason: "Shallow DOF for subject isolation and bokeh"
+
+    portrait_couple:
+      min: 3.5
+      max: 5.6
+      preferred: 4.0
+      reason: "Moderate DOF to keep both faces sharp"
+
+    group_small:  # 3-5 people
+      min: 5.0
+      max: 8.0
+      preferred: 5.6
+      reason: "Sufficient DOF for all subjects"
+
+    group_large:  # 6+ people
+      min: 7.1
+      max: 11.0
+      preferred: 8.0
+      reason: "Deep DOF to ensure everyone is in focus"
+
+    landscape:
+      min: 8.0
+      max: 16.0
+      preferred: 11.0
+      reason: "Maximum sharpness and depth of field"
+
+    action:
+      min: 2.8
+      max: 5.6
+      preferred: 4.0
+      reason: "Balance between DOF and fast shutter speed"
+
+  # shutter speed preferences
+  shutter_speed:
+    min_handheld: "1/125"  # Without IS
+    min_stabilized: "1/60"  # With IBIS (8 stops)
+
+    # scene-specific minimums
+    portrait_min: "1/125"
+    portrait_close_min: "1/160"  # < 3m distance
+    action_min: "1/500"
+    sports_min: "1/1000"
+
+    # Rule: 1/(focal_length × multiplier)
+    focal_length_rule_multiplier: 2  # With IS
+
+  # ISO preferences
+  iso:
+    preferred_base: 100   # Cleanest image
+    acceptable_max: 6400  # Quality threshold
+    emergency_max: 12800  # Acceptable noise for important shots
+
+    # scene-specific preferences
+    portrait_max: 3200
+    landscape_max: 1600
+    action_max: 6400
+
+  # Subject distance thresholds (meters)
+  distance_thresholds:
+    close_portrait: 3.0
+    standard_portrait: 5.0
+    group_distance: 6.0
+    far_distance: 10.0
+
+lighting_analysis:
+  # brightness thresholds (0-255 scale)
+  thresholds:
+    very_dark:
+      max: 50
+      recommended_iso: 3200
+      recommended_aperture: 2.8
+
+    dark:
+      min: 50
+      max: 100
+      recommended_iso: 1600
+      recommended_aperture: 2.8
+
+    moderate:
+      min: 100
+      max: 150
+      recommended_iso: 800
+      recommended_aperture: 4.0
+
+    bright:
+      min: 150
+      max: 200
+      recommended_iso: 400
+      recommended_aperture: 5.6
+
+    very_bright:
+      min: 200
+      recommended_iso: 100
+      recommended_aperture: 8.0
+
+  # Histogram analysis
+  histogram:
+    use_histogram: true
+    contrast_threshold: 40  # std dev threshold for "good contrast"    #TODO : Research more on these configures --> CONTACT a photographer
+
+composition:
+  # enable composition analysis
+  enabled: true
+
+  # scoring weights --> sum == 1.0
+  weights:
+    rule_of_thirds: 0.30
+    balance: 0.25
+    subject_placement: 0.25
+    negative_space: 0.20
+
+  # thresholds for recommendations
+  thresholds:
+    minimum_score: 0.6  # Below  this --> give recommendations
+    excellent_score: 0.85  # Above this --> no changes needed
+
+  # Rule of thirds grid
+  rule_of_thirds:
+    tolerance_pixels: 50  # Acceptable distance from intersection
+
+  # Balance preferences
+  balance:
+    optimal_deviation: 0.15  # 15% off-center is ideal
+
+  # Edge safety
+  edge_safety:
+    threshold: 0.10  # 10% from edge
+
+depth_of_field:
+  # coc_override: 0.03  # mm  # Circle of confusion
+
+  # DOF calculation preferences
+  preferences:
+    portrait_dof_min: 0.3  # meters
+    portrait_dof_max: 1.0  # meters
+    group_dof_min: 2.0  # meters
+    landscape_dof_target: "infinity"
+
+validation:
+  # Strict validation (reject settings outside camera capabilities)
+  strict_mode: true
+
+  # Warnings (log warnings but allow settings)
+  warn_on:
+    high_iso: true  # Warn if ISO > acceptable_max
+    slow_shutter: true  # Warn if shutter < min_handheld
+    extreme_aperture: true  # Warn if aperture at limits
+
+  # Auto-correction (automatically adjust invalid settings)
+  auto_correct: true
+  auto_correct_to_nearest: true  # Round to nearest valid value
+
+features:
+  auto_framing: true
+  composition_analysis: true
+  person_tracking: true
+
+  multi_shot_capture: false
+  hdr_bracketing: false
+  focus_stacking: false
+
+  ai_composition_suggestions: false
+  scene_recognition: false
+
+logging:
+  # Log exposure calculations
+  log_exposure_calculations: true
+
+  # Log composition analysis
+  log_composition_scores: true
+
+  # Log lighting analysis
+  log_lighting_analysis: true
+
+  # Save debug images
+  save_debug_frames: false
+  debug_output_path: "/tmp/manriix_debug"
+
+  # Performance logging
+  log_calculation_time: true
+
+
+  ########## DEVICES
+
+  # CAMERA + LENSE
+  # - Canon EOS R6 Mark II camera
+  # - Canon RF 24-105mm f/2.8L IS USM Z lens
+  # - Full-frame sensor (35.9 x 23.9mm)
+
+# Default mode: Camera Auto  | exposure_control.enabled = false
+#
+# To enable manual exposure control:
+# 1. Set exposure_control.enabled = true
+# 2. Set camera physical mode dial to "M" (Manual)
+# 3. Ensure gPhoto2 can control aperture/shutter/ISO
+# 4. Test thoroughly before production use

@@ -98,7 +98,9 @@ def get_model_path(model_filename: str, env_var: str = 'MODELS_PATH') -> str:
         f"Model file '{model_filename}' not found. Searched:\n" +
         "\n".join(f"  - {p}" for p in searched_paths)
     )
-
+# =======================================================================
+#                         config.yaml validations
+# =======================================================================
 
 class ModelSource(BaseModel):
     """Yolo download and conversion settings"""
@@ -495,9 +497,9 @@ class Settings(BaseModel):
         if not model_path.exists() and self.system.environment == "production":
             raise ValueError(f"YOLO model not found: {model_path}")
         return self
-
-    ## Photo capture.yaml validations
-
+#========================================================================
+#                   photo_capture.yaml validations
+# =======================================================================
 class StateConfig(BaseModel):
     """Individual state configs"""
     description: str
@@ -627,6 +629,444 @@ class PhotoWorkflowConfig(BaseModel):
 
         return cls(**config_data)
 
+# =======================================================================
+#                       exposure_config.yaml validations
+# =======================================================================
+
+class SensorSpecs(BaseModel):
+    """Camera sensor specifications"""
+    type: Literal["full_frame", "aps_c", "micro_four_thirds"] = "full_frame"
+    width_mm: float = Field(gt=0, description="Sensor width in mm")
+    height_mm: float = Field(gt=0, description="Sensor height in mm")
+    crop_factor: float = Field(gt=0, le=2, description="Crop factor (1.0 for full-frame)")
+    circle_of_confusion_mm: float = Field(gt=0, le=0.1, description="Circle of confusion in mm")
+    megapixels: float = Field(gt=0, description="Sensor megapixels")
+    resolution_width: int = Field(gt=0, description="Horizontal resolution in pixels")
+    resolution_height: int = Field(gt=0, description="Vertical resolution in pixels")
+
+    @field_validator('crop_factor')
+    @classmethod
+    def validate_crop_factor(cls, v: float, info) -> float:
+        """Ensure crop factor matches sensor type"""
+        sensor_type = info.data.get('type')
+        if sensor_type == "full_frame" and v != 1.0:
+            raise ValueError("Full-frame sensors must have crop_factor = 1.0")
+        return v
+
+
+class LensSpecs(BaseModel):
+    """Camera lens specifications"""
+    model: str = Field(description="Lens model name")
+    focal_length_min: int = Field(gt=0, description="Minimum focal length in mm")
+    focal_length_max: int = Field(gt=0, description="Maximum focal length in mm")
+
+    # Aperture range (f-numbers) | f-number = wider opening, larger f-number = smaller opening
+    f_number_min: float = Field(gt=0, description="Minimum f-number (widest aperture)")
+    f_number_max: float = Field(gt=0, description="Maximum f-number (smallest aperture)")
+
+    available_apertures: List[float] = Field(description="Available f-stop values")
+    optical_is_stops: Optional[float] = Field(default=None, description="Optical IS in stops")
+    ibis_coordinated_stops: Optional[float] = Field(default=None, description="IBIS coordinated stops")
+
+    @field_validator('focal_length_max')
+    @classmethod
+    def validate_focal_range(cls, v: int, info) -> int:
+        """ensure max focal length > min"""
+        min_fl = info.data.get('focal_length_min')
+        if min_fl and v <= min_fl:
+            raise ValueError(f"focal_length_max ({v}) must be greater than focal_length_min ({min_fl})")
+        return v
+
+    @field_validator('f_number_max')
+    @classmethod
+    def validate_aperture_range(cls, v: float, info) -> float:
+        """ensure max f-number > min f-number (smaller opening > larger opening)"""
+        min_fn = info.data.get('f_number_min')
+        if min_fn and v <= min_fn:
+            raise ValueError(
+                f"f_number_max ({v}) must be greater than f_number_min ({min_fn}). "
+                f"Remember: larger f-number = smaller aperture opening"
+            )
+        return v
+
+    @field_validator('available_apertures')
+    @classmethod
+    def validate_available_apertures(cls, v: List[float], info) -> List[float]:
+        """ensure available apertures are within lens range and sorted"""
+        if not v:
+            raise ValueError("available_apertures cannot be empty")
+
+        min_fn = info.data.get('f_number_min')
+        max_fn = info.data.get('f_number_max')
+
+        if min_fn and max_fn:
+            for ap in v:
+                if ap < min_fn or ap > max_fn:
+                    raise ValueError(
+                        f"Aperture f/{ap} outside lens range "
+                        f"[f/{min_fn} - f/{max_fn}]"
+                    )
+
+        # Ensure sorted
+        if v != sorted(v):
+            raise ValueError("available_apertures must be sorted in ascending order")
+
+        return v
+
+
+class ISOSpecs(BaseModel):
+    """ISO specs"""
+    min: int = Field(gt=0, description="Minimum ISO")
+    max: int = Field(gt=0, description="Maximum ISO")
+    expanded_min: Optional[int] = Field(default=None, description="Expanded ISO minimum")
+    expanded_max: Optional[int] = Field(default=None, description="Expanded ISO maximum")
+    standard_values: List[int] = Field(description="Available ISO values")
+
+    @field_validator('max')
+    @classmethod
+    def validate_iso_range(cls, v: int, info) -> int:
+        """ensure max ISO > min ISO"""
+        min_iso = info.data.get('min')
+        if min_iso and v <= min_iso:
+            raise ValueError(f"max ISO ({v}) must be greater than min ISO ({min_iso})")
+        return v
+
+    @field_validator('standard_values')
+    @classmethod
+    def validate_standard_values(cls, v: List[int], info) -> List[int]:
+        """ensure standard ISO values are within range and sorted"""
+        if not v:
+            raise ValueError("standard_values cannot be empty")
+
+        min_iso = info.data.get('min')
+        max_iso = info.data.get('max')
+
+        if min_iso and max_iso:
+            for iso in v:
+                if iso < min_iso or iso > max_iso:
+                    raise ValueError(f"ISO {iso} outside camera range [{min_iso}-{max_iso}]")
+
+        # Ensure sorted
+        if v != sorted(v):
+            raise ValueError("standard_values must be sorted in ascending order")
+
+        return v
+
+class CameraSpecs(BaseModel):
+    """Camera specs"""
+    sensor: SensorSpecs = Field(default_factory=SensorSpecs, description="Sensor specs")
+    lens: LensSpecs = Field(default_factory=LensSpecs, description="Lens specs")
+    iso: ISOSpecs = Field(default_factory=ISOSpecs, description="ISO specs")
+
+class ExposureControlSettings(BaseModel):
+    """Exposure control settings"""
+    enabled: bool = Field(default=False, description="Enable manual exposure control")
+    strategy: Literal["balanced", "portrait", "sports", "landscape"] = "balanced"
+    use_frame_analysis: bool = Field(default=True, description="Use vision-based lighting analysis")
+    log_recommendations: bool = Field(default=True, description="Log exposure recommendations")
+
+
+class ManualSettings(BaseModel):
+    """Manual default settings when exposure control disabled"""
+    default_aperture: float = Field(gt=0, description="Default aperture value")
+    default_shutter: str = Field(description="Default shutter speed")
+    default_iso: int = Field(gt=0, description="Default ISO value")
+    recommended_camera_mode: str = Field(default="Auto", description="Recommended camera mode")
+
+    @field_validator('default_shutter')
+    @classmethod
+    def validate_shutter_format(cls, v: str) -> str:
+        """Validate shutter speed format"""
+        if not v:
+            raise ValueError("default_shutter cannot be empty")
+
+        # Accept formats like "1/125", "1/250", "1", "2"
+        if '/' in v:
+            parts = v.split('/')
+            if len(parts) != 2 or not parts[0].isdigit() or not parts[1].isdigit():
+                raise ValueError(f"Invalid shutter speed format: {v}. Use format like '1/125'")
+        elif not v.replace('.', '').isdigit():
+            raise ValueError(f"Invalid shutter speed format: {v}")
+
+        return v
+
+
+class ApertureRangeSettings(BaseModel):
+    """Aperture range for a scene type"""
+    min: float = Field(gt=0, description="Minimum aperture")
+    max: float = Field(gt=0, description="Maximum aperture")
+    preferred: float = Field(gt=0, description="Preferred aperture")
+    reason: str = Field(description="Reasoning for this range")
+
+    @model_validator(mode='after')
+    def validate_range(self) -> 'ApertureRangeSettings':
+        """Ensure min <= preferred <= max"""
+        if not (self.min <= self.preferred <= self.max):
+            raise ValueError(f"Aperture range invalid: min={self.min}, preferred={self.preferred}, max={self.max}")
+        return self
+
+
+class ApertureRanges(BaseModel):
+    """Aperture ranges for all scene types"""
+    portrait_single: ApertureRangeSettings
+    portrait_couple: ApertureRangeSettings
+    group_small: ApertureRangeSettings
+    group_large: ApertureRangeSettings
+    landscape: ApertureRangeSettings
+    action: ApertureRangeSettings
+
+
+class ShutterSpeedPreferences(BaseModel):
+    """Shutter speed preferences"""
+    min_handheld: str = Field(description="Minimum handheld shutter speed")
+    min_stabilized: str = Field(description="Minimum with stabilization")
+    portrait_min: str = Field(description="Minimum for portraits")
+    portrait_close_min: str = Field(description="Minimum for close portraits")
+    action_min: str = Field(description="Minimum for action")
+    sports_min: str = Field(description="Minimum for sports")
+    focal_length_rule_multiplier: int = Field(gt=0, description="Multiplier for 1/focal_length rule")
+
+
+class ISOPreferences(BaseModel):
+    """ISO preferences"""
+    preferred_base: int = Field(gt=0, description="Preferred base ISO")
+    acceptable_max: int = Field(gt=0, description="Maximum acceptable ISO")
+    emergency_max: int = Field(gt=0, description="Emergency maximum ISO")
+    portrait_max: int = Field(gt=0, description="Maximum for portraits")
+    landscape_max: int = Field(gt=0, description="Maximum for landscapes")
+    action_max: int = Field(gt=0, description="Maximum for action")
+
+    @model_validator(mode='after')
+    def validate_iso_hierarchy(self) -> 'ISOPreferences':
+        """Ensure ISO limits are sensible"""
+        if not (self.preferred_base < self.acceptable_max < self.emergency_max):
+            raise ValueError("ISO hierarchy invalid: base < acceptable < emergency")
+        return self
+
+
+class DistanceThresholds(BaseModel):
+    """Subject distance thresholds in meters"""
+    close_portrait: float = Field(gt=0, description="Close portrait distance")
+    standard_portrait: float = Field(gt=0, description="Standard portrait distance")
+    group_distance: float = Field(gt=0, description="Group distance")
+    far_distance: float = Field(gt=0, description="Far distance")
+
+
+class PhotoPreferences(BaseModel):
+    """Photography preferences"""
+    aperture_ranges: ApertureRanges
+    shutter_speed: ShutterSpeedPreferences
+    iso: ISOPreferences
+    distance_thresholds: DistanceThresholds
+
+
+class LightingThreshold(BaseModel):
+    """Lighting condition threshold"""
+    min: Optional[int] = Field(default=None, ge=0, le=255)
+    max: Optional[int] = Field(default=None, ge=0, le=255)
+    recommended_iso: int = Field(gt=0)
+    recommended_aperture: float = Field(gt=0)
+
+    @model_validator(mode='after')
+    def validate_min_max(self) -> 'LightingThreshold':
+        """Ensure min < max if both present"""
+        if self.min is not None and self.max is not None:
+            if self.min >= self.max:
+                raise ValueError(f"min ({self.min}) must be less than max ({self.max})")
+        return self
+
+
+class LightingThresholds(BaseModel):
+    """All lighting condition thresholds"""
+    very_dark: LightingThreshold
+    dark: LightingThreshold
+    moderate: LightingThreshold
+    bright: LightingThreshold
+    very_bright: LightingThreshold
+
+
+class HistogramSettings(BaseModel):
+    """Histogram analysis settings"""
+    use_histogram: bool = True
+    contrast_threshold: int = Field(ge=0, le=255, description="Contrast threshold")
+
+
+class LightingAnalysisSettings(BaseModel):
+    """Lighting analysis configuration"""
+    thresholds: LightingThresholds
+    histogram: HistogramSettings
+
+
+class CompositionWeights(BaseModel):
+    """Composition scoring weights"""
+    rule_of_thirds: float = Field(ge=0, le=1)
+    balance: float = Field(ge=0, le=1)
+    subject_placement: float = Field(ge=0, le=1)
+    negative_space: float = Field(ge=0, le=1)
+
+    @model_validator(mode='after')
+    def validate_sum(self) -> 'CompositionWeights':
+        """Ensure weights sum to 1.0"""
+        total = (self.rule_of_thirds + self.balance +
+                 self.subject_placement + self.negative_space)
+        if not (0.99 <= total <= 1.01):  # Allow small floating point error
+            raise ValueError(f"Composition weights must sum to 1.0, got {total}")
+        return self
+
+
+class CompositionThresholds(BaseModel):
+    """Composition score thresholds"""
+    minimum_score: float = Field(ge=0, le=1, description="Minimum acceptable score")
+    excellent_score: float = Field(ge=0, le=1, description="Excellent score threshold")
+
+    @model_validator(mode='after')
+    def validate_thresholds(self) -> 'CompositionThresholds':
+        """Ensure minimum < excellent"""
+        if self.minimum_score >= self.excellent_score:
+            raise ValueError(f"minimum_score must be less than excellent_score")
+        return self
+
+
+class RuleOfThirdsSettings(BaseModel):
+    """Rule of thirds settings"""
+    tolerance_pixels: int = Field(ge=0, description="Tolerance in pixels")
+
+
+class BalanceSettings(BaseModel):
+    """Balance settings"""
+    optimal_deviation: float = Field(ge=0, le=0.5, description="Optimal off-center ratio")
+
+
+class EdgeSafetySettings(BaseModel):
+    """Edge safety settings"""
+    threshold: float = Field(ge=0, le=0.5, description="Edge safety threshold")
+
+
+class CompositionSettings(BaseModel):
+    """Composition analysis configuration"""
+    enabled: bool = True
+    weights: CompositionWeights
+    thresholds: CompositionThresholds
+    rule_of_thirds: RuleOfThirdsSettings
+    balance: BalanceSettings
+    edge_safety: EdgeSafetySettings
+
+class DepthOfFieldPreferences(BaseModel):
+    """DOF preferences"""
+    portrait_dof_min: float = Field(gt=0, description="Minimum portrait DOF")
+    portrait_dof_max: float = Field(gt=0, description="Maximum portrait DOF")
+    group_dof_min: float = Field(gt=0, description="Minimum group DOF")
+    landscape_dof_target: str = Field(description="Landscape DOF target")
+
+class DepthOfFieldConfig(BaseModel):
+    """Depth of field configuration"""
+    preferences: DepthOfFieldPreferences
+
+class ValidationSettings(BaseModel):
+    """Validation configuration"""
+    strict_mode: bool = Field(default=True, description="Strict validation mode")
+    warn_on: Dict[str, bool] = Field(description="Warning triggers")
+    auto_correct: bool = Field(default=True, description="Auto-correct invalid settings")
+    auto_correct_to_nearest: bool = Field(default=True, description="Round to nearest valid")
+
+
+class FeatureFlags(BaseModel):
+    """Feature flags for development"""
+    auto_framing: bool = True
+    composition_analysis: bool = True
+    person_tracking: bool = True
+    multi_shot_capture: bool = False
+    hdr_bracketing: bool = False
+    focus_stacking: bool = False
+    ai_composition_suggestions: bool = False
+    scene_recognition: bool = False
+
+
+class LoggingSettings(BaseModel):
+    """Logging configuration"""
+    log_exposure_calculations: bool = True
+    log_composition_scores: bool = True
+    log_lighting_analysis: bool = True
+    save_debug_frames: bool = False
+    debug_output_path: str = "/tmp/manriix_debug"
+    log_calculation_time: bool = True
+
+    @field_validator('debug_output_path')
+    @classmethod
+    def validate_path(cls, v: str) -> str:
+        """Ensure path is valid"""
+        if not v:
+            raise ValueError("debug_output_path cannot be empty")
+        return v
+
+
+class ExposureConfig(BaseModel):
+    """Complete exposure configuration with validation"""
+    exposure_control: ExposureControlSettings
+    camera_specs: CameraSpecs
+    manual_settings: ManualSettings
+    preferences: PhotoPreferences
+    lighting_analysis: LightingAnalysisSettings
+    composition: CompositionSettings
+    validation: ValidationSettings
+    features: FeatureFlags
+    depth_of_field: DepthOfFieldConfig
+    logging: LoggingSettings
+
+    @classmethod
+    def from_yaml(cls, config_path: str) -> "ExposureConfig":
+        """Load exposure config from YAML file"""
+        path = Path(config_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Exposure config file does not exist: {config_path}")
+
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                config_data = yaml.safe_load(f)
+        except yaml.YAMLError as exc:
+            raise ValueError(f"Invalid YAML config: {exc}")
+
+        if not isinstance(config_data, dict):
+            raise ValueError(f"Config must be a dict: {type(config_data)}")
+
+        return cls(**config_data)
+
+    @model_validator(mode='after')
+    def validate_exposure_config(self) -> 'ExposureConfig':
+        """Cross-validate settings"""
+        # Validate manual defaults against camera capabilities
+        camera_specs = self.camera_specs
+        manual_settings = self.manual_settings
+
+        # Check aperture (using new naming)
+        f_min = camera_specs.lens.f_number_min
+        f_max = camera_specs.lens.f_number_max
+        default_ap = manual_settings.default_aperture
+
+        if not (f_min <= default_ap <= f_max):
+            raise ValueError(
+                f"default_aperture f/{default_ap} outside lens range "
+                f"[f/{f_min} - f/{f_max}]"
+            )
+
+        # Check ISO
+        if not (camera_specs.iso.min <= manual_settings.default_iso <= camera_specs.iso.max):
+            raise ValueError(
+                f"default_iso {manual_settings.default_iso} outside camera range "
+                f"[{camera_specs.iso.min}-{camera_specs.iso.max}]"
+            )
+
+        # Validate preference ISOs against camera capabilities
+        iso_prefs = self.preferences.iso
+        if iso_prefs.emergency_max > camera_specs.iso.max:
+            raise ValueError(
+                f"emergency_max ISO {iso_prefs.emergency_max} exceeds camera max {camera_specs.iso.max}"
+            )
+
+        return self
+
+
+#====================================================================================
 
 #global settings  --> config.yaml
 _settings: Optional[Settings] = None
@@ -693,3 +1133,26 @@ def reload_workflow_config(config_path: Optional[str] = None) -> PhotoWorkflowCo
         config_path = get_config_path('photo_capture.yaml', 'WORKFLOW_CONFIG_PATH')
     _workflow_config = PhotoWorkflowConfig.from_yaml(config_path)
     return _workflow_config
+
+
+# #global settings  --> exposure_config.yaml
+
+_exposure_config: Optional[ExposureConfig] = None
+
+def get_exposure_config() -> ExposureConfig:
+    """Get global exposure config"""
+    global _exposure_config
+    if _exposure_config is None:
+        exposure_config_path = get_config_path('exposure_config.yaml', 'EXPOSURE_CONFIG_PATH')
+        _exposure_config = ExposureConfig.from_yaml(exposure_config_path)
+    return _exposure_config
+
+def reload_exposure_config(config_path: Optional[str] = None) -> ExposureConfig:
+    """Reload exposure config"""
+    global _exposure_config
+    if config_path is None:
+        config_path = get_config_path('exposure_config.yaml', 'EXPOSURE_CONFIG_PATH')
+    _exposure_config = ExposureConfig.from_yaml(config_path)
+    return _exposure_config
+
+
