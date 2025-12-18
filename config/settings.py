@@ -10,11 +10,6 @@ class DictWrapper:
     """
     Wrapper that provides attribute-style access to dictionaries
     For backwards compatibility with old Pydantic models
-
-    Example:
-        config = {'camera': {'exposure_control': {'enabled': False}}}
-        wrapper = DictWrapper(config)
-        value = wrapper.camera.exposure_control.enabled  # Returns False
     """
 
     def __init__(self, data: Dict[str, Any]):
