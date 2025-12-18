@@ -84,7 +84,7 @@ class PositionCalculator:
         self.camera_tilt_rad = np.radians(self.config.camera_mounting.tilt_angle_deg)
 
         #position filtering
-        self.filtering_enabled = self.config.positioning_filtering.enabled
+        self.filtering_enabled = self.config.position_filtering.enabled
         self.filter_states: Dict[int, PositionFilterState] = {}
 
         #performance tracking
@@ -101,7 +101,7 @@ class PositionCalculator:
         logger.info("position_calculator_initialized",
                     camera_height=self.camera_height,
                     filtering_enabled=self.filtering_enabled,
-                    coordinate_system=self.config.coordinate_system)
+                    )
 
     def _init_ground_plane(self) -> None:
         """Initialize ground plane detection/configs"""
@@ -444,7 +444,7 @@ class PositionCalculator:
         filter_state = self.filter_states[track_id]
 
         #median filtering
-        if len(filter_state.previous_positions) >= self.config.positioning_filtering.median_window_size:
+        if len(filter_state.previous_positions) >= self.config.position_filtering.median_window_size:
 
             #remove oldest positions
             filter_state.previous_positions.pop(0)

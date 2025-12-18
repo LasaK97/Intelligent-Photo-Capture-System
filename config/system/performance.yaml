@@ -11,11 +11,12 @@
 # WARNING: Changes affect system responsiveness
 # =======================================================================
 
-# Performance targets (from shared/defaults.yaml)
-# target_fps: ${shared.defaults.performance.target_fps}
-# max_cpu_usage: ${shared.defaults.performance.max_cpu_usage}
-# max_gpu_usage: ${shared.defaults.performance.max_gpu_usage}
-# max_memory_usage: ${shared.defaults.performance.max_memory_usage}
+# Performance resource limits
+target_fps: 30
+processing_timeout: 0.1  # seconds
+max_cpu_usage: 80  # percentage
+max_gpu_usage: 85  # percentage
+max_memory_usage: 12  # GB
 
 # Component-specific performance
 components:

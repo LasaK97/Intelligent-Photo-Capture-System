@@ -19,9 +19,56 @@ workflow:
   capture_countdown_s: 3.0
   photos_per_session: 1
 
+# After workflow section, replace current scene_classification with:
+scene_classification:
+  enabled: true
+  distance_ranges:
+    portrait:
+      min_distance: 3.0
+      max_distance: 4.0
+      optimal_distance: 3.5
+    couple:
+      min_distance: 2.5
+      max_distance: 3.5
+      optimal_distance: 3.0
+      max_horizontal_spread: 0.8
+    small_group:
+      min_distance: 4.0
+      max_distance: 5.5
+      optimal_distance: 4.5
+      max_horizontal_spread: 2.5
+    medium_group:
+      min_distance: 5.0
+      max_distance: 6.5
+      optimal_distance: 5.5
+      max_horizontal_spread: 4.0
+    large_group:
+      min_distance: 6.0
+      max_distance: 8.0
+      optimal_distance: 7.0
+      max_horizontal_spread: 6.0
+
+  composition_padding:
+    padding:
+      portrait:
+        horizontal: 0.15
+        vertical: 0.20
+      couple:
+        horizontal: 0.12
+        vertical: 0.15
+      small_group:
+        horizontal: 0.10
+        vertical: 0.12
+      medium_group:
+        horizontal: 0.08
+        vertical: 0.10
+      large_group:
+        horizontal: 0.05
+        vertical: 0.08
+
 # Activation settings
 activation:
-  # trigger_topic: ${shared.topics.input_topics.activation_trigger}
+  trigger_topic: ${shared.topics.input_topics.activation_trigger}
   trigger_message: "y"
   auto_start: false
 
@@ -85,20 +132,74 @@ voice_guidance:
     welcome:
       - "Hello! Please come in front of me for your photo"
       - "Hi there! Step in front of the camera please"
+      - "Welcome! Let's take your photo"
+
+    single_person_detected:
+      - "Great! I can see you. Please move to the center"
+      - "Perfect! I've got you in frame"
+      - "Excellent! You're looking good"
+
+    couple_detected:
+      - "Perfect! I can see both of you. Please move closer together"
+      - "Great! Both of you are in frame"
+      - "Wonderful! I can see you both"
+
+    group_detected:
+      - "Wonderful! I can see your group. Please gather closer"
+      - "Excellent! Your whole group is here"
+      - "Perfect! Everyone's in the frame"
+
+    move_closer:
+      - "Please step a bit closer to me"
+      - "Can you come a little closer?"
+      - "Move forward just a bit please"
+
+    move_further:
+      - "Please step back a little"
+      - "Take a small step back please"
+      - "Move back just a bit"
+
+    move_left:
+      - "Please move slightly to your left"
+      - "Shift a bit to your left"
+      - "Step left a little please"
+
+    move_right:
+      - "Please move slightly to your right"
+      - "Shift a bit to your right"
+      - "Step right a little please"
+
+    move_together:
+      - "Please move closer together"
+      - "Gather in a bit more"
+      - "Get a little closer to each other"
+
+    spread_out:
+      - "Please spread out a little more"
+      - "Give each other a bit more space"
+      - "Spread out just a bit"
 
     perfect_position:
       - "Perfect! Please stay still"
       - "Excellent! Hold that position"
+      - "Great! Don't move"
 
     countdown_start:
       - "Get ready! Photo in"
       - "Here we go! Photo in"
+      - "Smile! Photo in"
 
-    countdown_numbers: ["3", "2", "1"]
+    countdown_numbers: [ "3", "2", "1" ]
 
     capture_complete:
       - "Great photo! Thank you!"
       - "Perfect! All done!"
+      - "Wonderful! Got it!"
+
+    timeout_warning:
+      - "I'm having trouble seeing you clearly. Please try again"
+      - "Let's try that again please"
+      - "Having some difficulty. One more time please"
 
 # Quality requirements
 quality_checks:

@@ -17,7 +17,7 @@ except ImportError:
 project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from config.settings import get_settings, Settings
+from config.settings import get_settings
 from ..utils.logger import get_logger
 from ..utils.threading_utils import get_thread_manager, async_retry
 from ..utils.exceptions import (

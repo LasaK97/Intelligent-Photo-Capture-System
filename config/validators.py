@@ -3,6 +3,33 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from pathlib import Path
 
 
+def get_model_path(model_filename: str) -> str:
+    """Find model files with standard search order"""
+    from pathlib import Path
+    import os
+
+    # 1. Check ROS2 package share directory (installed)
+    try:
+        from ament_index_python.packages import get_package_share_directory
+        pkg_share = Path(get_package_share_directory('manriix_photo_va'))
+        ros_model = pkg_share / 'models' / model_filename
+        if ros_model.exists():
+            return str(ros_model)
+    except:
+        pass
+
+    # 2. Check current working directory (development)
+    cwd_model = Path.cwd() / 'models' / model_filename
+    if cwd_model.exists():
+        return str(cwd_model)
+
+    # 3. Check relative to config file (development)
+    config_dir = Path(__file__).parent
+    dev_model = config_dir.parent / 'models' / model_filename
+    if dev_model.exists():
+        return str(dev_model)
+
+    raise FileNotFoundError(f"Model file not found: {model_filename}")
 # =============================================================================
 # HARDWARE DOMAIN VALIDATORS
 # =============================================================================
@@ -285,7 +312,12 @@ class YOLOConfig(BaseModel):
     def validate_model_path(cls, v: str) -> str:
         if not v.endswith('.engine'):
             raise ValueError(f'Model must be .engine file, got: {v}')
-        return v
+        try:
+            return get_model_path(v)
+        except FileNotFoundError:
+            import warnings
+            warnings.warn(f"Model not found: {v}. Using as-is.")
+            return v
 
     @field_validator('input_size')
     @classmethod

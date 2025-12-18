@@ -146,6 +146,19 @@ class YOLOPoseDetector:
             raise ModelLoadError("Ultralytics is not available")
 
         model_path = Path(self.config.model_path)
+        if not model_path.is_absolute() and not model_path.exists():
+            # Try ROS2 share directory
+            try:
+                from ament_index_python.packages import get_package_share_directory
+                pkg_share = Path(get_package_share_directory('manriix_photo_va'))
+                model_path = pkg_share / 'models' / model_path.name
+            except:
+                # Try local models directory
+                model_path = Path.cwd() / 'models' / model_path.name
+
+        if not model_path.exists():
+            raise ModelInferenceError(f"Model file not found: {model_path}")
+
         if not model_path.exists():
             raise ModelInferenceError(f"Model file not found: {model_path}")
 

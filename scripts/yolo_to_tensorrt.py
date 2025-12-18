@@ -12,7 +12,7 @@ import torch
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root))
 
-from config.settings import get_settings, TensorRTEngineSettings
+from config.settings import get_settings, # TensorRTEngineSettings
 from mipcs.utils.logger import get_logger
 
 logger = get_logger(__name__)

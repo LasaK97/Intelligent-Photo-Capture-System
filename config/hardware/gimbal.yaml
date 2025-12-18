@@ -17,7 +17,7 @@ gimbal_control:
   controller_name: "gimbal_controller"
 
   # Joint names from shared/hardware_specs.yaml
-  # joint_names: ${shared.hardware.gimbal.joint_names}
+  joint_names: ${shared.hardware.gimbal.joint_names}
 
   # Movement parameters
   movement:

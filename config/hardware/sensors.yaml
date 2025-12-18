@@ -14,8 +14,15 @@
 
 # RealSense Depth Camera Configuration
 realsense:
-  # Depth range from shared/hardware_specs.yaml
-  # depth_range: ${shared.hardware.sensors.realsense.depth_range}
+  # Core parameters (required by depth processor)
+  min_valid_pixels_ratio: 0.5
+  roi_percentage: 0.4
+  outlier_rejection_sigma: 2.0
+
+  # Depth sensing range
+  depth_range:
+    min: 0.4  # meters
+    max: 8.0  # meters
 
   # Processing parameters
   processing:
@@ -26,10 +33,10 @@ realsense:
 # Focus Motor Configuration
 focus:
   control_topic: "/set_focus_position"
+  calculation_method: "hyperfocal"
+  response_timeout: 2.0
 
-  # Motor range from shared/hardware_specs.yaml
-  # motor_range: ${shared.hardware.focus.motor_range}
-
-  # Focus calculation
-  calculation_method: "hyperfocal"  # "hyperfocal" or "calibration_table"
-  response_timeout: 2.0  # seconds
+  # Focus parameters
+  motor_range: [0, 4095]
+  default_focal_length: 50.0
+  hyperfocal_distance: 15.0

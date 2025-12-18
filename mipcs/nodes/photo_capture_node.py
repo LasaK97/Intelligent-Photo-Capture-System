@@ -39,7 +39,7 @@ from ..control.camera_controller import CameraController
 from ..control.state_machine import PhotoStateMachine, PhotoState
 from ..positioning.transform_manager import TransformManager
 
-from config.settings import get_settings
+from config.settings import get_settings, get_workflow_config
 from config.validators import validate_all_domains, get_validation_summary
 from ..utils.logger import get_logger, log_performance
 from ..utils.threading_utils import get_thread_manager, AsyncLock
@@ -304,40 +304,47 @@ class PhotoCaptureNode(Node):
             logger.error("async_component_init_failed", error=str(e))
             raise
 
+    # def _vision_processing_loop(self) -> None:
+    #     """Main vision processing loop"""
+    #     vision_rate = self.settings.control_timing.vision_processing_hz
+    #     loop_period = 1.0 / vision_rate
+    #
+    #     logger.info("vision_processing_loop started", target_hz=vision_rate)
+    #
+    #     while rclpy.ok():
+    #         loop_start = time.time()
+    #
+    #         try:
+    #             # get latest frame
+    #             frame_data = self.frame_client.get_latest_frame_sync()
+    #
+    #             if frame_data is not None:
+    #                 frame, metadata = frame_data
+    #
+    #                 #processing frame
+    #                 processing_result = self._process_frame(frame, metadata)
+    #
+    #                 #update lates results
+    #                 with self.processing_lock:
+    #                     self.latest_results = processing_result
+    #                     self._update_performance_stats(processing_result)
+    #
+    #             # sleep --> To maintain target rate
+    #             elapsed = time.time() - loop_start
+    #             sleep_time = max(0, loop_period - elapsed)
+    #             time.sleep(sleep_time)
+    #
+    #         except Exception as e:
+    #             logger.error("vision_processing_error", error=str(e))
+    #             time.sleep(0.1)
+
     def _vision_processing_loop(self) -> None:
         """Main vision processing loop"""
+        # Create event loop for this thread
+        self.vision_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.vision_loop)
+
         vision_rate = self.settings.control_timing.vision_processing_hz
-        loop_period = 1.0 / vision_rate
-
-        logger.info("vision_processing_loop started", target_hz=vision_rate)
-
-        while rclpy.ok():
-            loop_start = time.time()
-
-            try:
-                # get latest frame
-                frame_data = self.frame_client.get_latest_frame_sync()
-
-                if frame_data is not None:
-                    frame, metadata = frame_data
-
-                    #processing frame
-                    processing_result = self._process_frame(frame, metadata)
-
-                    #update lates results
-                    with self.processing_lock:
-                        self.latest_results = processing_result
-                        self._update_performance_stats(processing_result)
-
-                # sleep --> To maintain target rate
-                elapsed = time.time() - loop_start
-                sleep_time = max(0, loop_period - elapsed)
-                time.sleep(sleep_time)
-
-            except Exception as e:
-                logger.error("vision_processing_error", error=str(e))
-                time.sleep(0.1)
-
 
     @log_performance("frame_processing")
     def _process_frame(self, frame, metadata: FrameMetadata) -> ProcessingResult:
@@ -350,7 +357,7 @@ class PhotoCaptureNode(Node):
             # Person detections
             person_detections = asyncio.run_coroutine_threadsafe(
                 self.yolo_detector.detect_async(frame),
-                asyncio.get_event_loop()
+                self.vision_loop
             ).result(timeout=0.05)  #50ms
 
             result.person_detections = person_detections
