@@ -380,6 +380,7 @@ def get_auto_framing_config() -> Dict[str, Any]:
 
 def get_photo_capture_workflow() -> Dict[str, Any]:
     """Get photo capture workflow configuration"""
+<<<<<<< Updated upstream
     return get_settings().get_photo_capture_workflow()
 
 
@@ -401,3 +402,15 @@ def get_logging_config() -> Dict[str, Any]:
 def get_ros2_config() -> Dict[str, Any]:
     """Get ROS2 configuration"""
     return get_settings().get_ros2_config()
+=======
+    return get_settings().workflows.photo_capture.to_dict()
+
+def get_workflow_config() -> Dict[str, Any]:
+    """Get photo capture workflow configuration"""
+    return get_settings().get_workflows_config()['photo_capture']
+
+
+def get_photo_capture_workflow() -> Dict[str, Any]:
+    """Get photo capture workflow configuration (alias)"""
+    return get_workflow_config()
+>>>>>>> Stashed changes
