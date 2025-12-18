@@ -240,6 +240,19 @@ composition:
   edge_safety:
     threshold: 0.10  # 10% from edge
 
+  analyzer:
+    line_detection_threshold: 100
+    min_line_length: 50
+    max_line_gap: 10
+    circle_detection:
+      enabled: true
+      min_radius: 10
+      max_radius: 200
+      param1: 50
+      param2: 30
+    min_composition_score: 0.3
+    target_composition_score: 0.7
+
 depth_of_field:
   # coc_override: 0.03  # mm  # Circle of confusion
 

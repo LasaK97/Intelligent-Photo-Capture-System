@@ -942,6 +942,32 @@ class EdgeSafetySettings(BaseModel):
     threshold: float = Field(ge=0, le=0.5, description="Edge safety threshold")
 
 
+class CircleDetectionSettings(BaseModel):
+    """Circle detection configuration for Hough Circle Transform"""
+    enabled: bool = Field(default=True, description="Enable circle detection")
+    min_radius: int = Field(default=10, ge=1, description="Minimum circle radius in pixels")
+    max_radius: int = Field(default=200, ge=1, description="Maximum circle radius in pixels")
+    param1: int = Field(default=50, ge=1, description="Canny edge detection high threshold")
+    param2: int = Field(default=30, ge=1, description="Accumulator threshold for circle centers")
+
+    @model_validator(mode='after')
+    def validate_radius_range(self) -> 'CircleDetectionSettings':
+        """Ensure min_radius < max_radius"""
+        if self.min_radius >= self.max_radius:
+            raise ValueError(f"min_radius ({self.min_radius}) must be less than max_radius ({self.max_radius})")
+        return self
+
+class CompositionAnalyzer(BaseModel):
+    """"Composition analyzer"""
+    line_detection_threshold: int = Field(default=100, description="Line-detection threshold")
+    min_line_length: int = Field(default=50, description="Minimum line length")
+    max_line_gap: int = Field(default=10, description="Maximum line gap")
+    circle_detection: CircleDetectionSettings = Field(default_factory=CircleDetectionSettings, description="Circle detection settings")  # ⬅️ ADD THIS LINE
+    min_composition_score: float = Field(default=0.3, ge=0.0, le=1.0,  description="Minimum composition score")
+    target_composition_score: float = Field(default=0.7, ge=0.0, le=1.0, description="Target composition score")
+
+
+
 class CompositionSettings(BaseModel):
     """Composition analysis configuration"""
     enabled: bool = True
@@ -950,6 +976,7 @@ class CompositionSettings(BaseModel):
     rule_of_thirds: RuleOfThirdsSettings
     balance: BalanceSettings
     edge_safety: EdgeSafetySettings
+    analyzer: CompositionAnalyzer
 
 class DepthOfFieldPreferences(BaseModel):
     """DOF preferences"""

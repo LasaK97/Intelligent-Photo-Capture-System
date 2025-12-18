@@ -333,6 +333,22 @@ def calculate_golden_ratio_points(
     return intersections
 
 
+def calculate_intersection_points(
+        frame_width: int,
+        frame_height: int,
+        grid_type: str = "thirds"
+) -> List[Tuple[int, int]]:
+    """
+    Calculate intersection points for composition grids
+    """
+    if grid_type == "thirds":
+        return calculate_rule_of_thirds_points(frame_width, frame_height)
+    elif grid_type == "golden_ratio":
+        return calculate_golden_ratio_points(frame_width, frame_height)
+    else:
+        # Default to rule of thirds
+        return calculate_rule_of_thirds_points(frame_width, frame_height)
+
 def find_nearest_composition_point(
         point: Tuple[int, int],
         composition_points: List[Tuple[int, int]]
