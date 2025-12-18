@@ -1,0 +1,56 @@
+# =======================================================================
+# Algorithms: Auto-Framing Core Engine
+#
+# REFERENCED BY:
+#   - composition/auto_framing_engine.py
+#   - composition/framing_calculator.py
+#
+# REFERENCES:
+#   - shared/hardware_specs.yaml (camera FOV, focal lengths)
+#   - algorithms/positioning.yaml (scene classification)
+#
+# WARNING: Changes affect automatic framing quality
+# =======================================================================
+
+# Engine settings
+enabled: true
+default_mode: "single_shot"  # single_shot, multi_shot, creative_mode
+default_priority: "composition_quality"  # composition_quality, execution_speed, creative_variety
+max_execution_time: 20.0  # seconds
+quality_threshold: 0.7  # minimum score [0-1]
+cache_size: 50
+
+# Framing calculator settings
+framing:
+  # Camera parameters (reference shared specs)
+  # mount_height: ${shared.hardware.camera.mount_height}
+  # horizontal_fov: ${shared.hardware.camera.fov.horizontal}
+  # vertical_fov: ${shared.hardware.camera.fov.vertical}
+
+  # Frame parameters
+  frame_params:
+    safe_area_margin: 0.1  # 10% safe margin
+    composition_tolerance: 0.05  # 5% tolerance
+
+  # Strategy weights
+  strategy_weights:
+    quality_focused:
+      composition: 0.4
+      technical: 0.3
+      aesthetic: 0.2
+      uniqueness: 0.05
+      feasibility: 0.05
+
+    variety_focused:
+      composition: 0.25
+      technical: 0.2
+      aesthetic: 0.2
+      uniqueness: 0.3
+      feasibility: 0.05
+
+    speed_focused:
+      composition: 0.2
+      technical: 0.2
+      aesthetic: 0.1
+      uniqueness: 0.1
+      feasibility: 0.4

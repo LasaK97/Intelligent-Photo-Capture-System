@@ -1,0 +1,163 @@
+#========================================================================
+# Hardware specs referenced across multiple domains
+
+# REFERENCED BY :
+#   - hardware/camera.yaml
+#   - hardware/gimbal.yaml
+#   - algorithms/positioning.yaml
+#   - algorithms/auto_framing/core.yaml
+
+#========================================================================
+
+
+
+camera:
+  # Physical mounting
+  mount_height: 1.68  # meters above ground
+  mount_tilt_angle: 0.0  # degrees (positive = tilted down)
+
+  # Sensor specifications (Canon EOS R6 Mark II)
+  sensor:
+    type: "full_frame"
+    width_mm: 35.9
+    height_mm: 23.9
+    crop_factor: 1.0
+    circle_of_confusion_mm: 0.03
+    megapixels: 24.2
+    resolution:
+      width: 6000
+      height: 4000
+
+  # Lens specifications (RF 24-105mm f/2.8L IS USM Z)
+  lens:
+    model: "RF 24-105mm f/2.8L IS USM Z"
+    focal_length:
+      min: 24.0  # mm
+      max: 105.0  # mm
+      default: 50.0  # mm
+
+    aperture:
+      min: 2.8  # Maximum aperture (wide open)
+      max: 22.0  # Minimum aperture (stopped down)
+      available:
+        - 2.8
+        - 3.2
+        - 3.5
+        - 4.0
+        - 4.5
+        - 5.0
+        - 5.6
+        - 6.3
+        - 7.1
+        - 8.0
+        - 9.0
+        - 10.0
+        - 11.0
+        - 13.0
+        - 14.0
+        - 16.0
+        - 18.0
+        - 20.0
+        - 22.0
+
+    # Image stabilization
+    optical_is_stops: 5.5
+    ibis_coordinated_stops: 8.0
+
+  # Field of view calculations
+  fov:
+    horizontal: 62.2  # degrees at 50mm
+    vertical: 48.8  # degrees at 50mm
+
+  # ISO specifications
+  iso:
+    min: 100
+    max: 102400
+    expanded_min: 50
+    expanded_max: 204800
+    standard_values:
+      - 100
+      - 125
+      - 160
+      - 200
+      - 250
+      - 320
+      - 400
+      - 500
+      - 640
+      - 800
+      - 1000
+      - 1250
+      - 1600
+      - 2000
+      - 2500
+      - 3200
+      - 4000
+      - 5000
+      - 6400
+      - 8000
+      - 10000
+      - 12800
+      - 16000
+      - 20000
+      - 25600
+      - 32000
+      - 40000
+      - 51200
+      - 64000
+      - 80000
+      - 102400
+
+gimbal:
+  # Joint configuration
+  joint_names:
+    - "joint_5"  # yaw
+    - "joint_6"  # pitch
+    - "joint_7"  # roll
+
+  # Physical limits (radians)
+  limits:
+    yaw:
+      min: -1.57  # -90 degrees
+      max: 1.57   # +90 degrees
+    pitch:
+      min: -0.785  # -45 degrees
+      max: 0.785   # +45 degrees
+    roll:
+      min: 0.0
+      max: 0.0  # No roll movement
+
+  # Movement capabilities
+  movement:
+    max_velocity: 0.5  # rad/s
+    max_acceleration: 60.0  # degrees/s²
+    default_move_time: 1.0  # seconds
+    smoothness_factor: 0.8  # 0-1, higher = smoother
+
+focus:
+  # Focus motor specifications
+  motor_range:
+    min: 0
+    max: 4095
+
+  # Focal parameters
+  default_focal_length: 50.0  # mm
+  hyperfocal_distance: 15.0  # meters (for 50mm f/4)
+  calculation_method: "hyperfocal"  # "hyperfocal" or "calibration_table"
+
+sensors:
+  # RealSense Depth Camera
+  realsense:
+    depth_range:
+      min: 0.4  # meters
+      max: 8.0  # meters
+    roi_percentage: 0.4  # Center 40% of bbox for depth extraction
+    outlier_rejection_sigma: 2.0
+    min_valid_pixels_ratio: 0.5
+
+# Frame specifications for image processing
+frame:
+  width: 1920  # pixels
+  height: 1080  # pixels
+  safe_area_margin: 0.1  # 10% margin for safe framing
+  composition_tolerance: 0.05  # 5% tolerance for composition points

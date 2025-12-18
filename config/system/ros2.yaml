@@ -1,0 +1,35 @@
+# =======================================================================
+# System: ROS2 Topics & Parameters
+#
+# REFERENCED BY:
+#   - All ROS2 nodes
+#   - Launch files
+#
+# REFERENCES:
+#   - shared/ros_topics.yaml (ALL topic names)
+#
+# WARNING: Topic name changes require system-wide coordination
+# =======================================================================
+
+# ALL topic names are defined in shared/ros_topics.yaml
+# Access via: ${shared.topics.input_topics.*}
+#            ${shared.topics.output_topics.*}
+#            ${shared.topics.status_topics.*}
+
+# ROS2 QoS settings
+qos:
+  reliability: "reliable"  # reliable, best_effort
+  durability: "volatile"   # volatile, transient_local
+  history: "keep_last"
+  depth: 10
+
+# Node parameters
+node_params:
+  use_sim_time: false
+  publish_rate_hz: 10.0
+
+# TF settings
+tf:
+  publish_tf: true
+  tf_prefix: ""
+  update_rate_hz: 20.0

@@ -1,0 +1,27 @@
+# =======================================================================
+# System: Logging Configuration
+#
+# REFERENCED BY:
+#   - utils/logger.py
+#   - All system components
+#
+# WARNING: Log level changes affect debugging capability
+# =======================================================================
+
+level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+format: "structured"  # structured, simple
+file_path: "logs/manriix_photo_va.log"
+max_file_size_mb: 100
+backup_count: 5
+console_output: true
+
+# Feature-specific logging
+features:
+  exposure_calculations: true
+  composition_scores: true
+  lighting_analysis: true
+  calculation_time: true
+
+  # Debug options
+  save_debug_frames: false
+  debug_output_path: "/tmp/manriix_debug"

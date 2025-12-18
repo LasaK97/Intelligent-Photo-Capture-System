@@ -1,0 +1,56 @@
+# =======================================================================
+# Algorithms: Vision Pipeline Configuration
+#
+# REFERENCED BY:
+#   - vision/detector.py
+#   - vision/face_analyzer.py
+#   - vision/depth_processor.py
+#
+# REFERENCES:
+#   - shared/hardware_specs.yaml (sensor specs)
+#   - shared/defaults.yaml (quality thresholds)
+#
+# WARNING: Model changes require re-export of TensorRT engine
+# =======================================================================
+
+# YOLO11-pose Detection
+yolo:
+  model_path: "yolo11n-pose.engine"
+  confidence_threshold: 0.6
+  iou_threshold: 0.45
+  max_detections: 8
+  input_size: [640, 640]
+  device: 0  # GPU ID
+
+  # TensorRT Engine Settings
+  tensorrt:
+    precision: "FP16"  # FP16, FP32, INT8
+    batch_size: 1
+    workspace_size: 4  # GB
+
+  # Model Source
+  model_source:
+    base_model: "yolo11n-pose"
+    pt_model_path: "yolo11n-pose.pt"
+    model_urls:
+      "11": "https://github.com/ultralytics/assets/releases/download/v8.3.0/"
+      "v11": "https://github.com/ultralytics/assets/releases/download/v8.3.0/"
+
+# MediaPipe Face Analysis
+mediapipe:
+  face_mesh:
+    max_num_faces: 4
+    refine_landmarks: true
+    min_detection_confidence: 0.6
+    min_tracking_confidence: 0.5
+    static_image_mode: false
+
+  face_detection:
+    model_selection: 0  # 0=close-range, 1=full-range
+    min_detection_confidence: 0.6
+
+# Performance targets
+performance:
+  yolo_inference_ms: 15
+  face_analysis_ms: 10
+  depth_processing_ms: 5

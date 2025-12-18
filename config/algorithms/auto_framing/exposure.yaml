@@ -1,0 +1,90 @@
+# =======================================================================
+# Algorithms: Auto-Framing Exposure Control
+#
+# REFERENCED BY:
+#   - composition/auto_framing_engine.py
+#   - exposure calculation components
+#
+# REFERENCES:
+#   - shared/hardware_specs.yaml (aperture values, ISO ranges)
+#   - hardware/camera.yaml (exposure control settings)
+#
+# WARNING: Changes affect auto-framing image quality
+# =======================================================================
+
+# Aperture strategies for auto-framing scenarios
+aperture_strategies:
+  auto_single_portrait:
+    preferred_aperture: 2.8
+    fallback_apertures: [3.2, 3.5, 4.0]
+    reason: "Shallow DOF for subject isolation"
+
+  auto_couple_portrait:
+    preferred_aperture: 4.0
+    fallback_apertures: [3.5, 4.5, 5.0]
+    reason: "Moderate DOF for both subjects"
+
+  auto_group_shot:
+    preferred_aperture: 5.6
+    fallback_apertures: [5.0, 6.3, 7.1]
+    reason: "Sufficient DOF for all subjects"
+
+  auto_wide_shot:
+    preferred_aperture: 8.0
+    fallback_apertures: [7.1, 9.0, 11.0]
+    reason: "Deep DOF for establishing shots"
+
+# Focus strategies
+focus_strategies:
+  auto_subject_focus:
+    method: "auto_canon"
+    fallback_method: "manual_distance"
+    priority_points: "subject_center"
+
+  auto_group_focus:
+    method: "hyperfocal"
+    fallback_method: "manual_distance"
+    hyperfocal_multiplier: 1.2
+
+# Motion compensation for auto-framing movement
+motion_compensation:
+  movement_compensation_factor: 1.5  # Multiply min shutter
+
+  # Minimum shutter speeds during auto-framing
+  min_shutter_auto_framing:
+    portrait: "1/200"
+    group: "1/160"
+    action: "1/640"
+
+  use_ibis_during_movement: true
+  optical_is_priority: true
+
+# Lighting analysis thresholds
+lighting_thresholds:
+  very_dark:
+    max_brightness: 50
+    recommended_iso: 3200
+    recommended_aperture: 2.8
+
+  dark:
+    min_brightness: 50
+    max_brightness: 100
+    recommended_iso: 1600
+    recommended_aperture: 2.8
+
+  moderate:
+    min_brightness: 100
+    max_brightness: 150
+    recommended_iso: 800
+    recommended_aperture: 4.0
+
+  bright:
+    min_brightness: 150
+    max_brightness: 200
+    recommended_iso: 400
+    recommended_aperture: 5.6
+
+  very_bright:
+    min_brightness: 200
+    recommended_iso: 100
+    recommended_aperture: 8.0

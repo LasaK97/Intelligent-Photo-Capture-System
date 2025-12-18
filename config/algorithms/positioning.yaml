@@ -1,0 +1,82 @@
+# =======================================================================
+# Algorithms: 3D Positioning & Scene Classification
+#
+# REFERENCED BY:
+#   - positioning/position_calculator.py
+#   - positioning/scene_classifier.py
+#   - positioning/transform_manager.py
+#
+# REFERENCES:
+#   - shared/hardware_specs.yaml (camera mount height)
+#   - shared/coordinate_frames.yaml (TF frames)
+#
+# WARNING: Changes affect subject positioning accuracy
+# =======================================================================
+
+# Coordinate system configuration
+coordinate_system:
+  use_dynamic_transforms: true
+  transform_cache_duration: 1.0  # seconds
+
+# Camera mounting (references shared/hardware_specs.yaml)
+# camera_mounting.height_from_ground: ${shared.hardware.camera.mount_height}
+# camera_mounting.tilt_angle_deg: ${shared.hardware.camera.mount_tilt_angle}
+
+# Position filtering
+position_filtering:
+  enabled: true
+  median_window_size: 5
+  max_position_change_per_frame: 0.2  # meters
+  outlier_rejection_sigma: 2.0
+
+# Scene classification distance ranges
+scene_classification:
+  portrait:  # 1 person
+    min_distance: 3.0
+    max_distance: 4.0
+    optimal_distance: 3.5
+
+  couple:  # 2 people
+    min_distance: 2.5
+    max_distance: 3.5
+    optimal_distance: 3.0
+    max_horizontal_spread: 0.8
+
+  small_group:  # 3-4 people
+    min_distance: 4.0
+    max_distance: 5.5
+    optimal_distance: 4.5
+    max_horizontal_spread: 2.5
+
+  medium_group:  # 5-7 people
+    min_distance: 5.0
+    max_distance: 6.5
+    optimal_distance: 5.5
+    max_horizontal_spread: 4.0
+
+  large_group:  # 8+ people
+    min_distance: 6.0
+    max_distance: 8.0
+    optimal_distance: 7.0
+    max_horizontal_spread: 6.0
+
+# Composition padding for framing
+composition_padding:
+  portrait:
+    horizontal: 0.15  # 15%
+    vertical: 0.20    # 20%
+  couple:
+    horizontal: 0.12
+    vertical: 0.15
+  small_group:
+    horizontal: 0.10
+    vertical: 0.12
+  medium_group:
+    horizontal: 0.08
+    vertical: 0.10
+  large_group:
+    horizontal: 0.05
+    vertical: 0.08
+
+# Performance
+max_calculation_time_ms: 8

@@ -1,0 +1,58 @@
+# =======================================================================
+# System: Performance & Timing Configuration
+#
+# REFERENCED BY:
+#   - All system components
+#   - Performance monitoring
+#
+# REFERENCES:
+#   - shared/defaults.yaml (default performance targets)
+#
+# WARNING: Changes affect system responsiveness
+# =======================================================================
+
+# Performance targets (from shared/defaults.yaml)
+# target_fps: ${shared.defaults.performance.target_fps}
+# max_cpu_usage: ${shared.defaults.performance.max_cpu_usage}
+# max_gpu_usage: ${shared.defaults.performance.max_gpu_usage}
+# max_memory_usage: ${shared.defaults.performance.max_memory_usage}
+
+# Component-specific performance
+components:
+  depth_processing:
+    max_processing_time_ms: 15
+    roi_extraction_method: "center_40_percent"
+    outlier_rejection_enabled: true
+
+  position_calculation:
+    max_calculation_time_ms: 8
+    coordinate_transformation_method: "realsense_intrinsics"
+
+  control_system:
+    max_command_latency_ms: 20
+    gimbal_response_timeout_s: 3.0
+    focus_response_timeout_s: 2.0
+
+# Control loop timing
+control_timing:
+  main_loop_hz: 5.0
+  vision_processing_hz: 10.0
+  depth_processing_hz: 5.0
+  position_update_hz: 5.0
+
+# Threading configuration
+threading:
+  max_workers: 4
+  thread_timeout: 30.0
+  use_async: true
+
+# Testing configuration
+testing:
+  test_image_path: "tests/test_data/test_image.jpg"
+  test_depth_path: "tests/test_data/test_depth.png"
+  mock_canon_server: true
+
+  performance_benchmarks:
+    yolo_inference_ms: 15
+    face_analysis_ms: 10
+    depth_processing_ms: 5

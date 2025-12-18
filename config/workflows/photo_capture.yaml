@@ -1,0 +1,154 @@
+# =======================================================================
+# Workflows: Photo Capture State Machine & Workflow
+#
+# REFERENCED BY:
+#   - nodes/photo_capture_node.py
+#   - control/state_machine.py
+#
+# REFERENCES:
+#   - shared/ros_topics.yaml (activation trigger)
+#   - algorithms/positioning.yaml (scene classification)
+#
+# WARNING: Timing changes affect user experience
+# =======================================================================
+
+# Workflow configuration
+workflow:
+  max_session_time_s: 60.0
+  max_positioning_time_s: 30.0
+  capture_countdown_s: 3.0
+  photos_per_session: 1
+
+# Activation settings
+activation:
+  # trigger_topic: ${shared.topics.input_topics.activation_trigger}
+  trigger_message: "y"
+  auto_start: false
+
+# State machine states
+states:
+  idle:
+    description: "Waiting for activation"
+    timeout_s: null
+
+  initializing:
+    description: "Setting up gimbal and focus"
+    timeout_s: 5.0
+    actions:
+      - reset_gimbal_position
+      - set_default_focus
+
+  detecting:
+    description: "Looking for people"
+    timeout_s: 10.0
+    min_detection_time_s: 1.0
+    min_person_confidence: 0.7
+
+  positioning:
+    description: "Analyzing positions and guiding subjects"
+    timeout_s: 30.0
+    max_guidance_attempts: 5
+    position_tolerance_m: 0.3
+
+  adjusting_camera:
+    description: "Setting optimal gimbal and focus"
+    timeout_s: 5.0
+
+  verifying:
+    description: "Final checks before capture"
+    timeout_s: 3.0
+    required_checks:
+      - faces_visible
+      - positions_stable
+      - camera_ready
+
+  countdown:
+    description: "3-2-1 countdown"
+    duration_s: 3.0
+
+  capturing:
+    description: "Taking photo"
+    timeout_s: 5.0
+
+  complete:
+    description: "Session finished"
+    display_time_s: 2.0
+
+# Voice guidance messages
+voice_guidance:
+  language: "en"
+  timing:
+    message_interval_s: 2.0
+    position_update_interval_s: 3.0
+
+  messages:
+    welcome:
+      - "Hello! Please come in front of me for your photo"
+      - "Hi there! Step in front of the camera please"
+
+    perfect_position:
+      - "Perfect! Please stay still"
+      - "Excellent! Hold that position"
+
+    countdown_start:
+      - "Get ready! Photo in"
+      - "Here we go! Photo in"
+
+    countdown_numbers: ["3", "2", "1"]
+
+    capture_complete:
+      - "Great photo! Thank you!"
+      - "Perfect! All done!"
+
+# Quality requirements
+quality_checks:
+  min_face_size_pixels: 80
+  max_motion_blur_threshold: 5.0
+  min_contrast_level: 0.3
+
+# Subject positioning preferences
+subject_positioning:
+  vertical_center_offset: 0.1  # Slightly above center
+  horizontal_tolerance: 0.05
+
+# Error handling
+error_handling:
+  depth_failures:
+    max_consecutive_failures: 5
+    fallback_to_estimation: true
+
+  detection_failures:
+    max_no_detection_time_s: 5.0
+
+  control_failures:
+    gimbal_timeout_recovery: "return_to_home"
+    focus_timeout_recovery: "use_hyperfocal"
+    max_recovery_attempts: 3
+
+  system_failures:
+    critical_component_timeout_s: 10.0
+    emergency_shutdown_enabled: true
+    auto_restart_attempts: 2
+
+# Auto-framing workflow integration
+auto_framing_workflow:
+  enabled: true
+
+  activation:
+    auto_on_detection: true
+    manual_trigger_topic: "/auto_frame_request"
+
+  timing:
+    max_framing_time: 15.0
+    positioning_timeout: 10.0
+    quality_improvement_timeout: 5.0
+
+    step_delays:
+      after_detection_delay: 1.0
+      before_capture_delay: 2.0
+      between_optimizations: 0.5
+
+  execution_modes:
+    single_optimization: true
+    continuous_tracking: false
+    multi_shot_sequence: false

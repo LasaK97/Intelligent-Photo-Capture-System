@@ -1,0 +1,32 @@
+#========================================================================
+# TF frame names and transformations
+
+# REFERENCED BY :
+#   - algorithms/positioning.yaml
+#   - control components
+#   - ROS2 transform publisher
+
+# WARNING: Frame name changes require system-wide coordination
+#========================================================================
+
+
+frames:
+  # Camera frames
+  camera_optical: "camera_color_optical_frame"
+  camera_link: "camera_link"
+
+  # Robot base frames
+  base_link: "base_link"
+  base_footprint: "base_footprint"
+
+# Coordinate system preferences
+coordinate_system:
+  primary: "camera_frame"  # Primary coordinate system for calculations
+  use_dynamic_transforms: true
+  transform_cache_duration: 1.0  # seconds
+
+# Ground plane configuration
+ground_plane:
+  detection_method: "fixed_height"  # "fixed_height" or "ransac"
+  assumption: "flat_ground"
+  height_tolerance: 0.05  # meters

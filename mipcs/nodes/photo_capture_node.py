@@ -39,7 +39,8 @@ from ..control.camera_controller import CameraController
 from ..control.state_machine import PhotoStateMachine, PhotoState
 from ..positioning.transform_manager import TransformManager
 
-from config.settings import get_settings, get_workflow_config
+from config.settings import get_settings
+from config.validators import validate_all_domains, get_validation_summary
 from ..utils.logger import get_logger, log_performance
 from ..utils.threading_utils import get_thread_manager, AsyncLock
 from ..utils.exceptions import ManriixError, VisionError, ControlError
@@ -66,6 +67,25 @@ class PhotoCaptureNode(Node):
         # load configs
         self.settings = get_settings()
         self.config = self.settings.photo_capture
+
+        # Validate all domains
+        hw = self.settings.get_hardware_config()
+        alg = self.settings.get_algorithms_config()
+        wf = self.settings.get_workflows_config()
+        sys = self.settings.get_system_config()
+
+        # Run production validation
+        validated_hw, validated_alg, validated_wf, validated_sys = validate_all_domains(
+            hw, alg, wf, sys
+        )
+
+        # Get and log validation summary
+        summary = get_validation_summary(validated_hw, validated_alg, validated_wf, validated_sys)
+        self.get_logger().info(f"\n{summary}")
+
+        self.get_logger().info("✅ Configuration validation passed")
+
+
 
         # processing state
         self.processing_lock = AsyncLock()

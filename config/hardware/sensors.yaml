@@ -1,0 +1,35 @@
+# =======================================================================
+# Hardware: Sensor Configuration
+#
+# REFERENCED BY:
+#   - vision/depth_processor.py
+#   - positioning components
+#
+# REFERENCES:
+#   - shared/hardware_specs.yaml (sensor specs)
+#   - shared/ros_topics.yaml (sensor topics)
+#
+# WARNING: Changes affect depth sensing and positioning accuracy
+# =======================================================================
+
+# RealSense Depth Camera Configuration
+realsense:
+  # Depth range from shared/hardware_specs.yaml
+  # depth_range: ${shared.hardware.sensors.realsense.depth_range}
+
+  # Processing parameters
+  processing:
+    max_processing_time_ms: 15
+    roi_extraction_method: "center_40_percent"
+    outlier_rejection_enabled: true
+
+# Focus Motor Configuration
+focus:
+  control_topic: "/set_focus_position"
+
+  # Motor range from shared/hardware_specs.yaml
+  # motor_range: ${shared.hardware.focus.motor_range}
+
+  # Focus calculation
+  calculation_method: "hyperfocal"  # "hyperfocal" or "calibration_table"
+  response_timeout: 2.0  # seconds

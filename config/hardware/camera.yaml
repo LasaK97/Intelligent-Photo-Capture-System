@@ -1,0 +1,72 @@
+# =======================================================================
+# Hardware: Canon Camera Configuration
+#
+# REFERENCED BY:
+#   - algorithms/auto_framing/exposure.yaml
+#   - vision pipeline components
+#   - exposure control system
+#
+# REFERENCES:
+#   - shared/hardware_specs.yaml (camera specs, lens specs, ISO values)
+#
+# WARNING: Changes affect exposure calculations and image capture
+# =======================================================================
+
+# Canon Frame Client Configuration
+frame_client:
+  host: "127.0.0.1"
+  port: 8089
+  timeout: 5.0
+  frame_queue_size: 5
+  reconnect_attempts: 3
+  reconnect_delay: 2.0
+
+# Camera physical specifications are in shared/hardware_specs.yaml
+# Access via: ${shared.hardware.camera.*}
+
+# Exposure Control Settings
+exposure_control:
+  enabled: false  # false = Canon Auto mode | true = Canon Manual mode
+  strategy: "balanced"  # balanced, portrait, sports, landscape
+  use_frame_analysis: true
+  log_recommendations: true
+
+# Manual exposure defaults (when exposure_control.enabled = true)
+manual_settings:
+  default_aperture: 2.8
+  default_shutter: "1/125"
+  default_iso: 400
+  recommended_camera_mode: "Auto"
+
+# Shutter speed preferences
+shutter_preferences:
+  min_handheld: "1/125"
+  min_stabilized: "1/60"
+  focal_length_rule_multiplier: 2
+
+  # Scene-specific minimums
+  portrait_min: "1/125"
+  portrait_close_min: "1/160"
+  action_min: "1/500"
+  sports_min: "1/1000"
+
+# ISO preferences
+iso_preferences:
+  preferred_base: 100
+  acceptable_max: 6400
+  emergency_max: 12800
+
+  # Scene-specific
+  portrait_max: 3200
+  landscape_max: 1600
+  action_max: 6400
+
+# Validation settings
+validation:
+  strict_mode: true
+  warn_on:
+    high_iso: true
+    slow_shutter: true
+    extreme_aperture: true
+  auto_correct: true
+  auto_correct_to_nearest: true

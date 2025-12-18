@@ -1,0 +1,33 @@
+#========================================================================
+# TF frame names and transformations
+
+# REFERENCED BY :
+#   - All domain configurations
+#   - Component initialization
+#========================================================================
+
+system:
+  name: "manriix_photo_capture_va"
+  version: "1.0.0"
+  environment: "development"  # development, testing, production
+  debug: true
+
+# Default timing values
+timing:
+  default_timeout: 5.0  # seconds
+  default_retry_attempts: 3
+  default_retry_delay: 2.0  # seconds
+
+# Default performance targets
+performance:
+  target_fps: 30
+  processing_timeout: 0.1  # seconds
+  max_cpu_usage: 80  # percentage
+  max_gpu_usage: 85  # percentage
+  max_memory_usage: 12  # GB
+
+# Default quality thresholds
+quality:
+  min_confidence: 0.6  # Detection confidence threshold
+  min_quality_score: 0.7  # Overall quality threshold
+  min_face_size_pixels: 80  # Minimum face size for quality

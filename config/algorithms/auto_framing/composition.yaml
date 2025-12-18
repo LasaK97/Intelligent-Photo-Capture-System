@@ -1,0 +1,88 @@
+# =======================================================================
+# Algorithms: Auto-Framing Composition Analysis
+#
+# REFERENCED BY:
+#   - composition/composition_analyzer.py
+#   - composition/background_analyzer.py
+#
+# REFERENCES:
+#   - None (standalone composition rules)
+#
+# WARNING: Weight changes affect composition scoring
+# =======================================================================
+
+# Composition analysis
+enabled: true
+
+# Scoring weights (must sum to 1.0)
+weights:
+  rule_of_thirds: 0.30
+  balance: 0.25
+  subject_placement: 0.25
+  negative_space: 0.20
+
+# Quality thresholds
+thresholds:
+  minimum_score: 0.6  # Below = give recommendations
+  excellent_score: 0.85  # Above = no changes needed
+
+# Rule of thirds
+rule_of_thirds:
+  tolerance_pixels: 50  # Acceptable distance from intersection
+
+# Balance preferences
+balance:
+  optimal_deviation: 0.15  # 15% off-center is ideal
+
+# Edge safety
+edge_safety:
+  threshold: 0.10  # 10% from edge
+
+# Analyzer settings
+analyzer:
+  line_detection_threshold: 100
+  min_line_length: 50
+  max_line_gap: 10
+  min_composition_score: 0.3
+  target_composition_score: 0.7
+
+  circle_detection:
+    enabled: true
+    min_radius: 10
+    max_radius: 200
+
+# Background analyzer
+background:
+  edge_detection:
+    threshold_low: 50
+    threshold_high: 150
+
+  color_analysis:
+    dominant_colors_count: 5
+    saturation_threshold: 0.7
+
+  distraction_detection:
+    brightness_threshold: 240
+    contrast_threshold: 80
+
+  thresholds:
+    complexity_threshold: 0.7
+    distraction_threshold: 0.6
+    neutral_color_preference: 0.8
+
+  cache_size: 50
+
+# Auto-framing specific weights
+auto_framing_weights:
+  rule_of_thirds: 0.35
+  golden_ratio: 0.20
+  subject_centering: 0.15
+  leading_lines: 0.15
+  symmetry: 0.10
+  negative_space: 0.05
+
+# Quality gates for auto-framing
+quality_gates:
+  minimum_acceptable: 0.5
+  target_quality: 0.75
+  excellent_quality: 0.85

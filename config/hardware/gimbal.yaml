@@ -1,0 +1,49 @@
+# =======================================================================
+# Hardware: Gimbal Control Configuration
+#
+# REFERENCED BY:
+#   - control/camera_controller.py
+#   - algorithms/motion_planner.yaml
+#
+# REFERENCES:
+#   - shared/hardware_specs.yaml (gimbal limits, joint names)
+#
+# WARNING: Changes affect camera positioning and safety limits
+# =======================================================================
+
+# Gimbal control method
+gimbal_control:
+  control_method: "direct"  # "action" or "direct"
+  controller_name: "gimbal_controller"
+
+  # Joint names from shared/hardware_specs.yaml
+  # joint_names: ${shared.hardware.gimbal.joint_names}
+
+  # Movement parameters
+  movement:
+    default_move_time: 1.0  # seconds
+    safety_margin: 0.1  # 10% safety margin on limits
+
+
+# Motion planning constraints
+motion_constraints:
+  max_pan_velocity: 30.0  # degrees/second
+  max_tilt_velocity: 30.0  # degrees/second
+  max_pan_acceleration: 60.0  # degrees/second²
+  max_tilt_acceleration: 60.0  # degrees/second²
+  max_jerk: 120.0
+  smoothness_factor: 0.8  # 0-1, higher = smoother
+
+# Trajectory generation
+trajectory:
+  default_sample_rate: 50.0  # Hz
+  min_trajectory_points: 10
+  max_trajectory_points: 1000
+
+  # Available motion profiles
+  profiles:
+    linear: true
+    ease_in_out: true
+    ease_in: true
+    ease_out: true
+    s_curve: true

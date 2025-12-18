@@ -1,0 +1,39 @@
+# =======================================================================
+#  System-wide default values and constants
+#
+# REFERENCED BY :
+#   - system/ros2.yaml
+#   - All ROS2 node components
+#   - Launch files
+#
+# WARNING: Topic name changes require subscriber/publisher coordination
+# =======================================================================
+
+input_topics:
+  # Sensor inputs
+  realsense_depth: "/camera/camera/aligned_depth_to_color/image_raw"
+  realsense_camera_info: "/camera/camera/aligned_depth_to_color/camera_info"
+
+  # Robot state
+  joint_states: "/joint_states"
+
+  # Activation triggers
+  activation_trigger: "/va_photo_capture"
+  auto_frame_request: "/auto_frame_request"
+
+output_topics:
+  # Control outputs
+  gimbal_commands: "/gimbalCmd"
+  focus_commands: "/set_focus_position"
+  capture_trigger: "/capture_image_topic"
+
+  # User feedback
+  tts_output: "/tts_text_output"
+
+status_topics:
+  # System monitoring
+  system_status: "/photo_capture/status"
+  detection_debug: "/detection/debug"
+
+  # Performance metrics
+  performance_metrics: "/photo_capture/metrics"
