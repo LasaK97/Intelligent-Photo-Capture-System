@@ -132,6 +132,10 @@ class UnifiedSettings:
         """Get ROS2 configuration"""
         return self._loader.get_ros2_config()
 
+    def get_tracking_config(self) -> Dict[str, Any]:
+        """Get tracking configuration"""
+        return self._loader.get_tracking_config()
+
     @property
     def hardware(self) -> DictWrapper:
         """Access hardware domain: settings.hardware.camera.exposure_control"""
@@ -267,6 +271,11 @@ class UnifiedSettings:
         """Convenience: settings.gimbal → hardware.gimbal"""
         return self.hardware.gimbal
 
+    @property
+    def tracking(self) -> DictWrapper:
+        """Convenience: settings.tracking → algorithms.tracking"""
+        return self.algorithms.tracking
+
     def validate(self) -> bool:
         """Validate all configurations"""
         return self._loader.validate_all_configs()
@@ -364,3 +373,7 @@ def get_logging_config() -> Dict[str, Any]:
 def get_ros2_config() -> Dict[str, Any]:
     """Get ROS2 configuration"""
     return get_settings().get_ros2_config()
+
+def get_tracking_config() -> Dict[str, Any]:
+    """Get tracking configuration"""
+    return get_settings().get_tracking_config()

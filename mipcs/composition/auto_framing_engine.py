@@ -9,8 +9,6 @@ from collections import deque
 from pathlib import Path
 import sys
 
-from triton.experimental.gluon.language.amd.cdna4.async_copy import async_wait
-
 project_root = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(project_root))
 

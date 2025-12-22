@@ -1,0 +1,75 @@
+# =======================================================================
+# Algorithms: Person Tracking & Motion Prediction
+#
+# REFERENCED BY:
+#   - tracking/person_tracker.py
+#   - tracking/motion_predictor.py
+#   - tracking/attention_manager.py
+#
+# REFERENCES:
+#   - None (standalone tracking system)
+#
+# WARNING: Changes affect tracking stability and focus management
+# =======================================================================
+
+# Tracking system
+enabled: true
+
+# Track association
+max_tracking_distance: 2.0  # meters - max distance for track-detection matching
+max_association_cost: 2.0   # maximum cost for Hungarian algorithm
+use_hungarian_algorithm: true
+
+# Track lifecycle
+track_timeout: 5.0          # seconds - time before track expires
+occlusion_threshold: 1.0    # meters - distance threshold for occlusion detection
+occlusion_timeout: 3.0      # seconds - max time track can be occluded
+lost_track_timeout: 10.0    # seconds - time before lost track is removed
+tentative_confirmation: 3   # frames - confirmations needed for tentative track
+
+# Quality thresholds
+min_confidence: 0.3         # minimum detection confidence
+min_tracking_quality: 0.5   # minimum quality to maintain track
+min_stability_score: 0.4    # minimum stability for confirmed track
+
+# Position history
+max_history_length: 10      # number of positions to store per track
+position_smoothing: 0.3     # smoothing factor for position updates (0-1)
+
+# Attention scoring weights
+attention_weights:
+  face_quality: 0.30        # weight for face detection quality
+  pose_quality: 0.20        # weight for pose estimation quality
+  distance_optimal: 0.20    # weight for optimal distance (2-4m)
+  stability: 0.15           # weight for movement stability
+  tracking_duration: 0.15   # weight for how long tracked
+
+# Distance preferences for attention
+optimal_distance_min: 2.0   # meters
+optimal_distance_max: 6.0   # meters
+optimal_distance_center: 3.5  # meters - ideal distance
+
+# Motion prediction
+motion_prediction:
+  enabled: true
+  prediction_horizon: 2.0           # seconds to predict ahead
+  min_history_for_prediction: 3     # minimum positions needed
+  kalman_process_noise: 0.1         # process noise covariance
+  kalman_measurement_noise: 0.1     # measurement noise covariance
+  velocity_smoothing: 0.5           # velocity estimate smoothing
+  confidence_decay: 0.9             # confidence decay per second
+  update_rate: 30.0                 # Hz - Kalman filter update frequency
+
+# Attention management
+attention_management:
+  enabled: true
+  min_focus_duration: 2.0           # seconds - minimum time to hold focus
+  min_attention_improvement: 0.2    # required improvement to change focus
+  focus_change_smoothing: 0.5       # smoothing for focus transitions
+  attention_history_size: 10        # number of attention states to remember
+
+# Debug and logging
+debug_mode: false
+log_track_creation: true
+log_track_loss: true
+log_focus_changes: true

@@ -153,6 +153,10 @@ class DomainConfigLoader:
         """Get ROS2 configuration from system domain"""
         return self._system.get("ros2", {})
 
+    def get_tracking_config(self) -> Dict[str, Any]:
+        """Get tracking configuration from algorithms domain"""
+        return self._algorithms.get("tracking", {})
+
     def validate_all_configs(self, use_pydantic: bool = True, check_consistency: bool = True) -> bool:
         """validate all loaded configurations"""
         # Validate shared configs first
@@ -303,3 +307,7 @@ def get_vision_config() -> Dict[str, Any]:
 def get_auto_framing_config() -> Dict[str, Any]:
     """Get auto-framing configuration"""
     return get_domain_loader().get_auto_framing_config()
+
+def get_tracking_config() -> Dict[str, Any]:
+    """Get tracking configuration"""
+    return get_domain_loader().get_tracking_config()
