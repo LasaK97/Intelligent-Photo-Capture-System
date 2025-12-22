@@ -1,16 +1,11 @@
-
 from typing import Dict, Any, Optional
 from pathlib import Path
 
-# Import domain loader
 from config.domain_loader import DomainConfigLoader
 
 
 class DictWrapper:
-    """
-    Wrapper that provides attribute-style access to dictionaries
-    For backwards compatibility with old Pydantic models
-    """
+    """Wrapper that provides attribute-style access to dictionaries"""
 
     def __init__(self, data: Dict[str, Any]):
         self._data = data
@@ -24,11 +19,9 @@ class DictWrapper:
 
         value = self._data[name]
 
-        # If value is a dict, wrap it for nested access
         if isinstance(value, dict):
             return DictWrapper(value)
 
-        # If value is a list of dicts, wrap each dict
         if isinstance(value, list) and value and isinstance(value[0], dict):
             return [DictWrapper(item) if isinstance(item, dict) else item
                     for item in value]
@@ -66,36 +59,21 @@ class DictWrapper:
         return self._data
 
     def model_dump(self) -> Dict[str, Any]:
-        """Pydantic V2 compatibility - alias for to_dict()"""
+        """Pydantic V2 compatibility"""
         return self.to_dict()
 
 
 class UnifiedSettings:
-    """
-    Unified settings that provide backwards-compatible access to
-    domain-based configuration system.
-    """
+    """Unified settings with backwards-compatible access to domain-based configuration"""
 
     def __init__(self, config_dir: Optional[Path] = None):
-        """
-        Initialize unified settings
-
-        Args:
-            config_dir: Path to config directory (defaults to this file's parent)
-        """
-        # Initialize domain loader
         self._loader = DomainConfigLoader(config_dir)
 
-        # Create wrapped versions for backwards compatibility
         self._hardware_wrapper = DictWrapper(self._loader.get_hardware_config())
         self._algorithms_wrapper = DictWrapper(self._loader.get_algorithms_config())
         self._workflows_wrapper = DictWrapper(self._loader.get_workflows_config())
         self._system_wrapper = DictWrapper(self._loader.get_system_config())
         self._shared_wrapper = DictWrapper(self._loader.get_shared_config())
-
-    # =========================================================================
-    # Domain-level accessors (NEW recommended style)
-    # =========================================================================
 
     def get_hardware_config(self) -> Dict[str, Any]:
         """Get hardware domain configuration"""
@@ -116,10 +94,6 @@ class UnifiedSettings:
     def get_shared_config(self) -> Dict[str, Any]:
         """Get shared configuration"""
         return self._loader.get_shared_config()
-
-    # =========================================================================
-    # Specific config accessors (NEW recommended style)
-    # =========================================================================
 
     def get_camera_config(self) -> Dict[str, Any]:
         """Get camera configuration"""
@@ -158,38 +132,30 @@ class UnifiedSettings:
         """Get ROS2 configuration"""
         return self._loader.get_ros2_config()
 
-    # =========================================================================
-    # Backwards-compatible attribute access (OLD style - for migration)
-    # =========================================================================
-
     @property
     def hardware(self) -> DictWrapper:
-        """Backwards compatible: settings.hardware.camera.exposure_control"""
+        """Access hardware domain: settings.hardware.camera.exposure_control"""
         return self._hardware_wrapper
 
     @property
     def algorithms(self) -> DictWrapper:
-        """Backwards compatible: settings.algorithms.vision.yolo"""
+        """Access algorithms domain: settings.algorithms.vision.yolo"""
         return self._algorithms_wrapper
 
     @property
     def workflows(self) -> DictWrapper:
-        """Backwards compatible: settings.workflows.photo_capture"""
+        """Access workflows domain: settings.workflows.photo_capture"""
         return self._workflows_wrapper
 
     @property
     def system(self) -> DictWrapper:
-        """Backwards compatible: settings.system.performance"""
+        """Access system domain: settings.system.performance"""
         return self._system_wrapper
 
     @property
     def shared(self) -> DictWrapper:
-        """Backwards compatible: settings.shared.hardware.camera"""
+        """Access shared config: settings.shared.hardware.camera"""
         return self._shared_wrapper
-
-    # =========================================================================
-    # Legacy attribute mappings (OLD monolithic config.yaml style)
-    # =========================================================================
 
     @property
     def vision(self) -> DictWrapper:
@@ -203,7 +169,7 @@ class UnifiedSettings:
 
     @property
     def camera_control(self) -> DictWrapper:
-        """Legacy: settings.camera_control.gimbal"""
+        """Legacy: settings.camera_control.gimbal and focus"""
         gimbal_data = self._loader.get_gimbal_config()
         sensors_data = self._loader.get_hardware_config().get('sensors', {})
         return DictWrapper({
@@ -213,14 +179,12 @@ class UnifiedSettings:
 
     @property
     def positioning(self) -> DictWrapper:
-        """Legacy: settings.positioning - with flattened coordinate_system fields"""
+        """Legacy: settings.positioning with flattened coordinate_system fields"""
         pos_config = self._loader.get_positioning_config().copy()
 
-        # Flatten coordinate_system fields to root level for backwards compatibility
         if 'coordinate_system' in pos_config:
             coord_sys = pos_config['coordinate_system']
 
-            # Add root-level access to nested fields
             if 'use_dynamic_transforms' in coord_sys:
                 pos_config['use_dynamic_transforms'] = coord_sys['use_dynamic_transforms']
 
@@ -246,10 +210,9 @@ class UnifiedSettings:
 
     @property
     def ros2_topics(self) -> DictWrapper:
-        """Legacy: settings.ros2_topics - flattened for backwards compatibility"""
+        """Legacy: settings.ros2_topics flattened for backwards compatibility"""
         shared_topics = self._loader.shared_loader.ros_topics
 
-        # Flatten nested structure: input_topics, output_topics, status_topics → root level
         flattened = {}
 
         if 'input_topics' in shared_topics:
@@ -284,32 +247,36 @@ class UnifiedSettings:
         """Legacy: settings.ros2"""
         return DictWrapper(self._loader.get_ros2_config())
 
-    # =========================================================================
-    # Validation
-    # =========================================================================
+    @property
+    def auto_framing(self) -> DictWrapper:
+        """Convenience: settings.auto_framing → algorithms.auto_framing"""
+        return self.algorithms.auto_framing
+
+    @property
+    def hardware_specs(self) -> DictWrapper:
+        """Access shared hardware specs"""
+        return DictWrapper(self._loader.shared_loader.hardware_specs)
+
+    @property
+    def camera(self) -> DictWrapper:
+        """Convenience: settings.camera → hardware.camera"""
+        return self.hardware.camera
+
+    @property
+    def gimbal(self) -> DictWrapper:
+        """Convenience: settings.gimbal → hardware.gimbal"""
+        return self.hardware.gimbal
 
     def validate(self) -> bool:
         """Validate all configurations"""
         return self._loader.validate_all_configs()
 
 
-# =============================================================================
-# Module-level singleton
-# =============================================================================
-
 _settings_instance: Optional[UnifiedSettings] = None
 
 
 def get_settings(config_dir: Optional[Path] = None) -> UnifiedSettings:
-    """
-    Get or create the unified settings singleton
-
-    Args:
-        config_dir: Path to config directory (only used on first call)
-
-    Returns:
-        UnifiedSettings instance
-    """
+    """Get or create the unified settings singleton"""
     global _settings_instance
 
     if _settings_instance is None:
@@ -323,10 +290,6 @@ def reset_settings():
     global _settings_instance
     _settings_instance = None
 
-
-# =============================================================================
-# Convenience functions (NEW recommended style)
-# =============================================================================
 
 def get_hardware_config() -> Dict[str, Any]:
     """Get hardware configuration"""
@@ -380,7 +343,6 @@ def get_auto_framing_config() -> Dict[str, Any]:
 
 def get_photo_capture_workflow() -> Dict[str, Any]:
     """Get photo capture workflow configuration"""
-<<<<<<< Updated upstream
     return get_settings().get_photo_capture_workflow()
 
 
@@ -402,15 +364,3 @@ def get_logging_config() -> Dict[str, Any]:
 def get_ros2_config() -> Dict[str, Any]:
     """Get ROS2 configuration"""
     return get_settings().get_ros2_config()
-=======
-    return get_settings().workflows.photo_capture.to_dict()
-
-def get_workflow_config() -> Dict[str, Any]:
-    """Get photo capture workflow configuration"""
-    return get_settings().get_workflows_config()['photo_capture']
-
-
-def get_photo_capture_workflow() -> Dict[str, Any]:
-    """Get photo capture workflow configuration (alias)"""
-    return get_workflow_config()
->>>>>>> Stashed changes
