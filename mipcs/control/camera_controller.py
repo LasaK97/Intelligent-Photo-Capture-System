@@ -425,6 +425,63 @@ class CameraController:
 
         logger.info("camera_controller_stopped")
 
+    async def execute_trajectory(self, trajectory: Dict) -> bool:
+        """
+        Execute motion planner trajectory.
+
+        Args:
+            trajectory: Dict with 'waypoints', 'duration', 'smoothness'
+
+        Returns:
+            True if successful, False otherwise
+        """
+        waypoints = trajectory.get('waypoints', [])
+
+        if not waypoints:
+            logger.warning("empty_trajectory_received")
+            return False
+
+        logger.info(
+            f"🎬 Executing trajectory: {len(waypoints)} waypoints, "
+            f"duration={trajectory.get('duration', 0):.2f}s"
+        )
+
+        try:
+            for i, waypoint in enumerate(waypoints):
+                # Convert degrees to radians (Manriix uses inverted yaw)
+                yaw = -np.radians(waypoint['pan'])  # Note: negative for Manriix
+                pitch = np.radians(waypoint['tilt'])
+                roll = 0.0  # No roll for Manriix
+
+                # Create gimbal target
+                target = GimbalTarget(
+                    yaw=yaw,
+                    pitch=pitch,
+                    roll=roll,
+                    move_time=0.3,  # Smooth 300ms movements
+                    priority='normal'
+                )
+
+                # Execute waypoint
+                success = await self.move_gimbal_to(target)
+
+                if not success:
+                    logger.warning(f"⚠️ Waypoint {i + 1}/{len(waypoints)} failed")
+                    return False
+
+                logger.debug(f"✅ Waypoint {i + 1}/{len(waypoints)} reached")
+
+                # Small delay between waypoints for smoothness
+                if i < len(waypoints) - 1:
+                    await asyncio.sleep(0.05)
+
+            logger.info("✅ Trajectory execution complete")
+            return True
+
+        except Exception as e:
+            logger.error(f"trajectory_execution_error: {e}")
+            return False
+
 
 
 

@@ -39,6 +39,15 @@ from ..control.camera_controller import CameraController
 from ..control.state_machine import PhotoStateMachine, PhotoState
 from ..positioning.transform_manager import TransformManager
 
+from ..tracking import PersonTracker, MotionPredictor, AttentionManager, TrackState
+from ..composition.auto_framing_engine import (
+    AutoFramingEngine,
+    FramingRequest,
+    FramingMode,
+    FramingPriority,
+    FramingResult
+)
+
 from config.settings import get_settings, get_workflow_config
 from config.validators import validate_all_domains, get_validation_summary
 from ..utils.logger import get_logger, log_performance
@@ -151,6 +160,17 @@ class PhotoCaptureNode(Node):
                 transform_manager=self.transform_manager
             )
             self.scene_classifier = SceneClassifier()
+
+            # tracking components
+            self.person_tracker = PersonTracker()
+            self.motion_predictor = MotionPredictor(self.person_tracker)
+            self.attention_manager = AttentionManager(self.person_tracker)
+            logger.info("tracking_components_initialized")
+
+            # init auto framing engine
+            self.auto_framing_engine = AutoFramingEngine()
+            logger.info("auto_framing_engine_initialized")
+
             self.camera_controller = CameraController(
                 node=self,
                 transform_manager=self.transform_manager
@@ -242,6 +262,43 @@ class PhotoCaptureNode(Node):
                     subscribers=4,
                     publishers=6,
                     timers=1)
+
+    def _tracks_to_groups(self, tracks: Dict) -> List[Dict]:
+        """Convert PersonTrack objects to subject groups for auto-framing"""
+
+        # Get confirmed tracks only
+        confirmed_tracks = [
+            t for t in tracks.values()
+            if t.state == TrackState.CONFIRMED
+        ]
+
+        if not confirmed_tracks:
+            return []
+
+        # Build subject groups from tracks
+        groups = []
+        for track in confirmed_tracks:
+            if not track.position_history:
+                continue
+
+            # Get last known position
+            last_pos = track.position_history[-1]
+
+            groups.append({
+                'subjects': [{
+                    'track_id': track.track_id,
+                    'person_id': track.track_id,
+                    'position_3d': last_pos,
+                    'attention_score': track.attention_score,
+                    'tracking_quality': track.tracking_quality
+                }],
+                'center_position': last_pos,
+                'group_type': 'individual'  # Auto-framing engine will refine
+            })
+
+        logger.debug(f"created_{len(groups)}_subject_groups_from_tracks")
+
+        return groups
 
     def _start_processing_threads(self) -> None:
         """Start threads in background"""
@@ -345,50 +402,165 @@ class PhotoCaptureNode(Node):
         asyncio.set_event_loop(self.vision_loop)
 
         vision_rate = self.settings.control_timing.vision_processing_hz
+        loop_period = 1.0 / vision_rate
+
+        logger.info("vision_processing_loop_started", target_hz=vision_rate)
+
+        while rclpy.ok():
+            loop_start = time.time()
+
+            try:
+                # Get latest frame
+                frame_data = self.frame_client.get_latest_frame_sync()
+
+                if frame_data is not None:
+                    frame, metadata = frame_data
+
+                    # Process frame (now async)
+                    processing_result = self.vision_loop.run_until_complete(
+                        self._process_frame(frame, metadata)
+                    )
+
+                    # Update latest results (synchronous context)
+                    self.latest_results = processing_result
+                    self._update_performance_stats(processing_result)
+
+                # Sleep to maintain target rate
+                elapsed = time.time() - loop_start
+                sleep_time = max(0, loop_period - elapsed)
+                time.sleep(sleep_time)
+
+            except Exception as e:
+                logger.error("vision_processing_error", error=str(e))
+                time.sleep(0.1)
 
     @log_performance("frame_processing")
-    def _process_frame(self, frame, metadata: FrameMetadata) -> ProcessingResult:
-        """Process single frame"""
+    async def _process_frame(self, frame, metadata: FrameMetadata) -> ProcessingResult:
+        """Process single frame with tracking and auto-framing"""
 
         start_time = time.time()
         result = ProcessingResult(frame_metadata=metadata)
 
         try:
             # Person detections
-            person_detections = asyncio.run_coroutine_threadsafe(
+            person_detections = await asyncio.wait_for(
                 self.yolo_detector.detect_async(frame),
-                self.vision_loop
-            ).result(timeout=0.05)  #50ms
+                timeout=0.05  # 50ms
+            )
 
             result.person_detections = person_detections
 
             if not person_detections:
-                result.success = True   # NOTE : valid result but no people
+                result.success = True  # Valid result but no people
                 return result
 
             # Face analysis
             face_bboxes = [det.bbox for det in person_detections]
-            face_analyses = asyncio.run_coroutine_threadsafe(
-                self.frace_analyzer.analyze_multiple_faces(frame, face_bboxes),
-                asyncio.get_event_loop()
-            ).result(timeout=0.08)   # 80ms
+            face_analyses = await asyncio.wait_for(
+                self.face_analyzer.analyze_multiple_faces(frame, face_bboxes),
+                timeout=0.08  # 80ms
+            )
 
             result.face_analyses = face_analyses
 
-            # depth processing and 3D positions
-            person_positions = asyncio.run_coroutine_threadsafe(
+            # Depth processing and 3D positions
+            person_positions = await asyncio.wait_for(
                 self.position_calculator.calculate_positions_batch(
                     person_detections, self.depth_processor
                 ),
-                asyncio.get_event_loop()
-            ).result(timeout=0.05) #50ms
+                timeout=0.05  # 50ms
+            )
+
+            result.person_positions = person_positions
 
             # Scene classification
             if person_positions:
                 scene_analysis = self.scene_classifier.analyze_scene(
-                    person_positions, face_analyses
+                    person_positions=person_positions,
+                    face_analyses=face_analyses
                 )
                 result.scene_analysis = scene_analysis
+
+            # === TRACKING & AUTO-FRAMING INTEGRATION ===
+            if person_positions:
+                timestamp = time.time()
+
+                # Build positions_3d dict for tracking
+                positions_3d = {
+                    i: (pos.position_camera.x, pos.position_camera.y, pos.position_camera.z)
+                    for i, pos in enumerate(person_positions) if pos
+                }
+
+                # Update tracking
+                try:
+                    tracks = await self.person_tracker.update_tracks(
+                        person_detections=[{
+                            'person_id': i,
+                            'confidence': det.confidence if det else 0.0,
+                            'pose_quality': getattr(det, 'pose_quality', 0.5)
+                        } for i, det in enumerate(person_detections)],
+                        positions_3d=positions_3d,
+                        face_analyses=face_analyses,
+                        timestamp=timestamp
+                    )
+
+                    confirmed_count = sum(1 for t in tracks.values() if t.state == TrackState.CONFIRMED)
+                    logger.info(f"👥 Tracking: {len(tracks)} active, {confirmed_count} confirmed")
+
+                    # Motion prediction
+                    if tracks:
+                        movement_prediction = self.motion_predictor.predict_group_movement(
+                            prediction_horizon=2.0
+                        )
+
+                        logger.debug(
+                            f"🔮 Predicted: {movement_prediction['group_center_prediction']}, "
+                            f"confidence={movement_prediction['confidence']:.2f}"
+                        )
+
+                        # Determine focus target
+                        focus_target = self.attention_manager.determine_optimal_focus()
+                        if focus_target:
+                            logger.debug(f"🎯 Focus: Track {focus_target}")
+
+                        # Auto-framing
+                        subject_groups = self._tracks_to_groups(tracks)
+
+                        if subject_groups:
+                            framing_request = FramingRequest(
+                                subject_groups=subject_groups,
+                                scene_analysis={
+                                    'frame': frame,
+                                    'prediction': movement_prediction,
+                                    'timestamp': timestamp
+                                },
+                                mode=FramingMode.SINGLE_SHOT,
+                                priority=FramingPriority.COMPOSITION_QUALITY
+                            )
+
+                            # Process framing
+                            framing_result = await self.auto_framing_engine.process_framing_request(
+                                framing_request
+                            )
+
+                            logger.info(
+                                f"📷 Framing: quality={framing_result.overall_quality:.2f}, "
+                                f"composition={framing_result.composition_score:.2f}"
+                            )
+
+                            # Execute camera movement (if trajectory available)
+                            if framing_result.trajectory and hasattr(self.camera_controller, 'execute_trajectory'):
+                                try:
+                                    # Execute in background (non-blocking)
+                                    asyncio.create_task(
+                                        self.camera_controller.execute_trajectory(framing_result.trajectory)
+                                    )
+                                    logger.debug("✅ Framing trajectory initiated")
+                                except Exception as traj_error:
+                                    logger.warning(f"trajectory_execution_failed: {traj_error}")
+
+                except Exception as tracking_error:
+                    logger.warning(f"tracking_integration_error: {tracking_error}")
 
             result.success = True
 
