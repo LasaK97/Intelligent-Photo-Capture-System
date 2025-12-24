@@ -22,7 +22,7 @@ from ..utils.geometry_utils import (
     detect_symmetry,
     calculate_2d_distance
 )
-from config.settings import get_settings, get_exposure_config
+from config.settings import get_settings
 
 
 try:
@@ -74,8 +74,8 @@ class CompositionAnalyzer:
             transform_manager: Optional['TransformManager'] = None,
             camera_intrinsics: Optional[Dict] = None
     ):
-        self.settings = get_exposure_config()
-        self.config = self.settings.composition.analyzer
+        self.settings = get_settings()
+        self.config = self.settings.auto_framing.composition.analyzer
         self.transform_manager = transform_manager
 
         # camera intrinsics

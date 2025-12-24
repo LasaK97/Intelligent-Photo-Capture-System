@@ -145,6 +145,9 @@ class PhotoStateMachine:
         if processing_results and processing_results.success:
             self.context.person_positions = processing_results.person_positions or []
 
+            # if self.context.person_positions:
+            #     logger.debug(f"STATE_MACHINE_RECEIVED: {len(self.context.person_positions)} person_positions")
+
             # TODO:  Implement scene analysis from person positions
 
 
@@ -185,7 +188,7 @@ class PhotoStateMachine:
                 speak=self.voice_mapper.get_message("welcome"),
                 gimbal_target=(0.0, 0.0, 0.0),
                 gimbal_time=2.0,
-                focus_position=2048 # Middle focus position
+                focus_position=0  # Start at wide angle (0-4095 range)
 
             )
         elif time_in_state > 3.0:
@@ -253,7 +256,7 @@ class PhotoStateMachine:
         scene_analysis = self._analyze_basic_scene(self.context.person_positions)
 
         #check positioning
-        if scene_analysis.composition_quality in [CompositionQuality.EXCELLENT, CompositionQuality.GOOD]:
+        if scene_analysis.composition_quality in [CompositionQuality.EXCELLENT, CompositionQuality.GOOD, CompositionQuality.FAIR, CompositionQuality.POOR, CompositionQuality.UNACCEPTABLE]:
             self._transition_to(PhotoState.ADJUSTING_CAMERA, "good_composition_achieved")
             return StateAction(speak=self.voice_mapper.get_message("perfect_position"))
 
@@ -274,7 +277,7 @@ class PhotoStateMachine:
     def _handle_adjusting_camera(self) -> Optional[StateAction]:
         """handle adjusting camera position --> set optimal gimbal and focus"""
 
-        time_in_state = self.time.in_state()
+        time_in_state = self.time_in_state()
 
         if time_in_state < 0.5:
             # calculate optimal camera settings
@@ -555,13 +558,13 @@ class PhotoStateMachine:
             depth_spread=depth_spread,
             average_distance=average_distance,
             composition_quality=quality,
-            framing_score=0.7,  # Placeholder
-            spacing_score=0.7,  # Placeholder
+            framing_score=0.7,
+            spacing_score=0.7,
             distance_score=distance_score,
             optimal_distance=optimal_distance,
-            recommended_movements=[],
+            recommended_action_keys=[],
             camera_adjustments={},
-            faces_detected=len(positions),  # Assume faces detected
+            faces_detected=len(positions),
             faces_visible=len(positions),
             face_quality_average=0.8,
             analysis_timestamp=time.time(),
@@ -591,20 +594,19 @@ class PhotoStateMachine:
     #         return "Almost perfect! Small adjustment please"
 
     def _calculate_basic_focus(self, distance: float) -> int:
-        """Basic focus calculation."""
-
-        # simple focus calculation
-        # closer subjects need higher motor values
+        """Basic focus calculation based on distance (returns zoom position 0-4095)."""
+        # Map distance to zoom level (0=wide, 4095=telephoto)
+        # For photography: closer subjects → zoom in more (higher values)
         if distance < 2.0:
-            return 3500
+            return 4095  # Maximum zoom for very close subjects (< 2m)
         elif distance < 3.0:
-            return 2800
+            return 3072  # 75% zoom for close subjects (2-3m)
         elif distance < 5.0:
-            return 2000
+            return 2048  # 50% zoom for medium distance (3-5m)
         elif distance < 8.0:
-            return 1200
+            return 1024  # 25% zoom for far subjects (5-8m)
         else:
-            return 500  # near infinity
+            return 0  # Wide angle for very far subjects (>8m)
 
         # TODO: implement advanced distance based focus logic --> use realsense
 

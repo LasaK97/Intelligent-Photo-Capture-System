@@ -58,10 +58,10 @@ class DepthData:
         self.confidence = confidence
         self.position_3d = position_3d
         self.roi_stats = roi_stats
-        self.processing_time_ms = processing_time_ms,
-        self.quality_score = quality_score,
-        self.extraction_method = extraction_method,
-        self.depth_quality_reason = depth_quality_reason,
+        self.processing_time_ms = processing_time_ms
+        self.quality_score = quality_score
+        self.extraction_method = extraction_method
+        self.depth_quality_reason = depth_quality_reason
 
     def to_dict(self) -> Dict:
         """Convert to dictionary for serialization."""
@@ -360,8 +360,8 @@ class DepthProcessor:
 
             # calculate 3D position
             bbox_center = (
-                (bbox[0] + bbox[2]) / 2,
-                (bbox[1] + bbox[3]) / 2
+                int((bbox[0] + bbox[2]) / 2),
+                int((bbox[1] + bbox[3]) / 2)
             )
 
             position_3d = self.intrinsics.deproject_pixel_to_point(

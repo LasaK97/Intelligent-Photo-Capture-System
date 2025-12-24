@@ -36,7 +36,7 @@ motion_constraints:
 
 # Trajectory generation
 trajectory:
-  default_sample_rate: 50.0  # Hz
+  default_sample_rate: 10.0  # Hz
   min_trajectory_points: 10
   max_trajectory_points: 1000
 

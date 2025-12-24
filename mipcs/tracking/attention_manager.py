@@ -50,7 +50,7 @@ class AttentionManager:
         # check if in cooldown
         if current_time < self.focus_change_cooldown_until:
             # if in cooldown --> return current target
-            if self.config.log_focus_changes:
+            if getattr(self.config, 'log_focus_changes', False):
                 logger.debug(
                     "focus_cooldown_active",
                     current_target=self.current_focus_target,
@@ -86,7 +86,7 @@ class AttentionManager:
             self.focus_change_cooldown_until = current_time + self.min_focus_duration
 
             # log focus change
-            if self.config.log_focus_changes:
+            if getattr(self.config, 'log_focus_changes', False):
                 logger.info(
                     "focus_target_changed",
                     old_target=old_target,

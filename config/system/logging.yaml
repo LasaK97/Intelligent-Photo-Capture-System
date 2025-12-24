@@ -8,7 +8,7 @@
 # WARNING: Log level changes affect debugging capability
 # =======================================================================
 
-level: "INFO"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
+level: "DEBUG"  # DEBUG, INFO, WARNING, ERROR, CRITICAL
 format: "structured"  # structured, simple
 file_path: "logs/manriix_photo_va.log"
 max_file_size_mb: 100

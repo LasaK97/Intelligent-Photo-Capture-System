@@ -274,8 +274,8 @@ class PersonTracker:
             if face_analyses and det_idx < len(face_analyses):
                 face = face_analyses[det_idx]
                 if face:
-                    track.face_quality = face.get('confidence', 0.0)
-                    track.facing_camera = face.get('facing_camera', False)
+                    track.face_quality = face.confidence if face else 0.0
+                    track.facing_camera = face.facing_camera if face else False
 
             # update pose quality
             track.pose_quality = detection.get('pose_quality', 0.5)
@@ -352,8 +352,8 @@ class PersonTracker:
             if face_analyses and det_idx < len(face_analyses):
                 face = face_analyses[det_idx]
                 if face:
-                    track.face_quality = face.get('confidence', 0.0)
-                    track.facing_camera = face.get('facing_camera', False)
+                    track.face_quality = face.confidence if face else 0.0
+                    track.facing_camera = face.facing_camera if face else False
 
             track.consecutive_hits = 1
             track.tracking_quality = 0.5
@@ -461,7 +461,7 @@ class PersonTracker:
             # clamp to [0, 1]
             track.attention_score = np.clip(track.attention_score, 0.0, 1.0)
 
-    def calculate_tracking_quality(self, track: PersonTrack) -> float:
+    def _calculate_tracking_quality(self, track: PersonTrack) -> float:
         """calculate tracking quality"""
 
         # recent hit rate

@@ -167,21 +167,35 @@ class CanonFrameClient:
         try:
             logger.info("connecting_to_frame_server", host=self.config.host, port=self.config.port)
 
-            #socket
+            # Create socket
             self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             self.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-            self.socket.settimeout(self.config.timeout)
 
-            #connect to frame server
-            await asyncio.get_event_loop().run_in_executor(
-                None,
-                self.socket.connect,
-                (self.config.host, self.config.port)
-            )
+            # Set NON-BLOCKING BEFORE connect
+            self.socket.setblocking(False)
 
-            #socket -> non-blocking
-            # self.socket.setblocking(False)
+            # Try to connect (will raise BlockingIOError immediately)
+            try:
+                self.socket.connect((self.config.host, self.config.port))
+            except BlockingIOError:
+                # Expected - socket is connecting in background
+                pass
+
+            # Wait for connection to complete (with timeout)
+            start_time = time.time()
+            while time.time() - start_time < self.config.timeout:
+                try:
+                    # Check if connected by trying to get peer name
+                    self.socket.getpeername()
+                    # If we get here, connection succeeded!
+                    break
+                except OSError:
+                    # Still connecting, wait a bit
+                    await asyncio.sleep(0.01)
+            else:
+                # Timeout reached
+                raise TimeoutError(f"Connection timeout after {self.config.timeout}s")
 
             self.state = ConnectionState.CONNECTED
             self.reconnect_attempts = 0
@@ -192,7 +206,10 @@ class CanonFrameClient:
         except Exception as e:
             self.state = ConnectionState.ERROR
             if self.socket:
-                self.socket.close()
+                try:
+                    self.socket.close()
+                except:
+                    pass
                 self.socket = None
 
             logger.error("canon_connection_failed", error=str(e))
@@ -224,6 +241,8 @@ class CanonFrameClient:
                     self.bytes_received += len(chunk)
                 except socket.timeout:
                     continue  # Normal timeout, retry
+                except BlockingIOError:  # ← ADD THIS NEW EXCEPTION HANDLER
+                    continue  # No data available, just retry - DON'T set ERROR state
                 except (ConnectionError, OSError) as e:
                     logger.warning("connection_error_during_receive", error=str(e))
                     self.state = ConnectionState.ERROR
@@ -361,22 +380,46 @@ class CanonFrameClient:
 
     async def _ensure_connected(self) -> bool:
         """Check if connection is established, reconnect if needed."""
+        # Already connected
         if self.state == ConnectionState.CONNECTED:
             return True
 
+        # First connection attempt (no delay needed)
+        if self.reconnect_attempts == 0:
+            logger.info("attempting_initial_connection")
+            self.last_reconnect_time = time.time()
+            self.reconnect_attempts += 1
+
+            try:
+                await self._connect()
+                return True
+            except CameraConnectionError as e:
+                logger.warning("initial_connection_failed", error=str(e))
+                return False
+
+        # Reconnection logic (with delays)
         current_time = time.time()
-        if (self.reconnect_attempts >= self.config.reconnect_attempts or
-        current_time - self.last_reconnect_time < self.config.reconnect_delay):
+
+        # Check if we've exceeded max attempts
+        if self.reconnect_attempts >= self.config.reconnect_attempts:
+            logger.warning("max_reconnect_attempts_reached", attempts=self.reconnect_attempts)
             return False
 
-        #reconnect
+        # Check if enough time has passed since last attempt
+        if current_time - self.last_reconnect_time < self.config.reconnect_delay:
+            return False
+
+        # Attempt reconnection
+        logger.info("attempting_reconnection", attempt=self.reconnect_attempts + 1)
         self.last_reconnect_time = current_time
         self.reconnect_attempts += 1
 
         try:
             await self._connect()
+            logger.info("reconnection_successful")
             return True
         except CameraConnectionError as e:
+            logger.warning("reconnection_failed", error=str(e), attempt=self.reconnect_attempts)
             return False
 
 

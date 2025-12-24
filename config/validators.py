@@ -662,6 +662,72 @@ class AutoFramingConfig(BaseModel):
 
     model_config = {"extra": "forbid"}
 
+# -----------------------------------------------------------------------------
+# Tracking
+# -----------------------------------------------------------------------------
+
+class AttentionWeights(BaseModel):
+    """Attention scoring weights"""
+    face_quality: float = Field(ge=0.0, le=1.0)
+    pose_quality: float = Field(ge=0.0, le=1.0)
+    distance_optimal: float = Field(ge=0.0, le=1.0)
+    stability: float = Field(ge=0.0, le=1.0)
+    tracking_duration: float = Field(ge=0.0, le=1.0)
+
+
+class MotionPredictionConfig(BaseModel):
+    """Motion prediction configuration"""
+    enabled: bool = True
+    prediction_horizon: float = Field(gt=0.0, default=2.0)
+    min_history_for_prediction: int = Field(ge=1, default=3)
+    update_rate: float = Field(gt=0.0, default=30.0)
+    kalman_process_noise: float = Field(gt=0.0, default=0.1)
+    kalman_measurement_noise: float = Field(gt=0.0, default=0.1)
+    velocity_smoothing: float = Field(ge=0.0, le=1.0, default=0.5)
+    confidence_decay: float = Field(ge=0.0, le=1.0, default=0.9)
+
+    model_config = {"extra": "allow"}
+
+
+class AttentionManagementConfig(BaseModel):
+    """Attention management configuration"""
+    enabled: bool = True
+    min_focus_duration: float = Field(gt=0.0, default=2.0)
+    min_attention_improvement: float = Field(ge=0.0, le=1.0, default=0.2)
+    focus_change_smoothing: float = Field(ge=0.0, le=1.0, default=0.5)
+    attention_history_size: int = Field(ge=1, default=10)
+
+    model_config = {"extra": "allow"}
+
+
+class TrackingConfig(BaseModel):
+    """Person tracking configuration"""
+    enabled: bool = True
+    max_tracking_distance: float = Field(gt=0.0, default=2.0)
+    max_association_cost: float = Field(gt=0.0, default=2.0)
+    use_hungarian_algorithm: bool = True
+    track_timeout: float = Field(gt=0.0, default=5.0)
+    occlusion_threshold: float = Field(gt=0.0, default=1.0)
+    occlusion_timeout: float = Field(gt=0.0, default=3.0)
+    lost_track_timeout: float = Field(gt=0.0, default=10.0)
+    tentative_confirmation: int = Field(ge=1, default=3)
+    min_confidence: float = Field(ge=0.0, le=1.0, default=0.3)
+    min_tracking_quality: float = Field(ge=0.0, le=1.0, default=0.5)
+    min_stability_score: float = Field(ge=0.0, le=1.0, default=0.4)
+    max_history_length: int = Field(ge=1, default=10)
+    position_smoothing: float = Field(ge=0.0, le=1.0, default=0.3)
+    attention_weights: AttentionWeights
+    optimal_distance_min: float = Field(gt=0.0, default=2.0)
+    optimal_distance_max: float = Field(gt=0.0, default=6.0)
+    optimal_distance_center: float = Field(gt=0.0, default=3.5)
+    motion_prediction: MotionPredictionConfig
+    attention_management: AttentionManagementConfig
+    debug_mode: bool = False
+    log_track_creation: bool = True
+    log_track_loss: bool = True
+    log_focus_changes: bool = True
+
+    model_config = {"extra": "allow"}
 
 # -----------------------------------------------------------------------------
 # Algorithms Domain Root Validator
@@ -672,6 +738,7 @@ class AlgorithmsConfig(BaseModel):
     vision: VisionConfig
     positioning: PositioningConfig
     auto_framing: AutoFramingConfig
+    tracking: TrackingConfig
 
     model_config = {"extra": "forbid"}
 

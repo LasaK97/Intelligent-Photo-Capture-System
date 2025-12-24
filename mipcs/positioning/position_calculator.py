@@ -149,6 +149,8 @@ class PositionCalculator:
 
                 except Exception as e:
                     logger.warning("position_calculation_failed", person_id=i, error=str(e))
+                    import traceback
+                    logger.warning("position_calculation_failed", person_id=i, error=str(e), traceback=traceback.format_exc())
                     positions.append(None)
                     self.processing_stats['failed_calculations'] += 1
 
@@ -260,7 +262,7 @@ class PositionCalculator:
         #apply rotation
         x_corrected = x
         y_corrected = y * cos_tilt - z * sin_tilt
-        z_corrected = z * sin_tilt + z * cos_tilt
+        z_corrected = y * sin_tilt + z * cos_tilt
 
         return (x_corrected, y_corrected, z_corrected)
 

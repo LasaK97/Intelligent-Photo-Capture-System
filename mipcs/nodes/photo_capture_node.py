@@ -35,7 +35,7 @@ from ..vision.depth_processor import DepthProcessor, DepthData
 
 from ..positioning.position_calculator import PositionCalculator, PersonPosition
 from ..positioning.scene_classifier import SceneClassifier, SceneAnalysis
-from ..control.camera_controller import CameraController
+from ..control.camera_controller import CameraController, GimbalTarget
 from ..control.state_machine import PhotoStateMachine, PhotoState
 from ..positioning.transform_manager import TransformManager
 
@@ -206,6 +206,14 @@ class PhotoCaptureNode(Node):
             callback_group=self.state_callback_group
         )
 
+        self.photo_trigger_sub = self.create_subscription(
+            String,
+            '/va_photo_capture',
+            self._photo_trigger_callback,
+            10,
+            callback_group=self.state_callback_group
+        )
+
         self.joint_state_sub = self.create_subscription(
             JointState,
             self.settings.ros2_topics.joint_states,
@@ -259,7 +267,7 @@ class PhotoCaptureNode(Node):
         )
 
         logger.info("ros_interfaces_initialized",
-                    subscribers=4,
+                    subscribers=5,
                     publishers=6,
                     timers=1)
 
@@ -349,7 +357,7 @@ class PhotoCaptureNode(Node):
             await self.face_analyzer.load_models()
 
             #frame clinet
-            await self.frame_client.start()
+            # await self.frame_client.start()
 
             #wait for cam calibration
             if hasattr(self.depth_processor, "wait_for_calibration"):
@@ -401,6 +409,14 @@ class PhotoCaptureNode(Node):
         self.vision_loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.vision_loop)
 
+        # Start frame client in THIS loop (not in init)
+        try:
+            self.vision_loop.run_until_complete(self.frame_client.start())
+            logger.info("frame_client_started_in_vision_loop")
+        except Exception as e:
+            logger.error(f"frame_client_start_failed: {e}")
+            return
+
         vision_rate = self.settings.control_timing.vision_processing_hz
         loop_period = 1.0 / vision_rate
 
@@ -410,6 +426,8 @@ class PhotoCaptureNode(Node):
             loop_start = time.time()
 
             try:
+                self.vision_loop.run_until_complete(asyncio.sleep(0.001))
+
                 # Get latest frame
                 frame_data = self.frame_client.get_latest_frame_sync()
 
@@ -433,6 +451,12 @@ class PhotoCaptureNode(Node):
             except Exception as e:
                 logger.error("vision_processing_error", error=str(e))
                 time.sleep(0.1)
+
+        # Cleanup on exit
+        try:
+            self.vision_loop.run_until_complete(self.frame_client.stop())
+        except Exception as e:
+            logger.warning(f"frame_client_stop_error: {e}")
 
     @log_performance("frame_processing")
     async def _process_frame(self, frame, metadata: FrameMetadata) -> ProcessingResult:
@@ -466,7 +490,7 @@ class PhotoCaptureNode(Node):
             # Depth processing and 3D positions
             person_positions = await asyncio.wait_for(
                 self.position_calculator.calculate_positions_batch(
-                    person_detections, self.depth_processor
+                    person_detections
                 ),
                 timeout=0.05  # 50ms
             )
@@ -487,7 +511,7 @@ class PhotoCaptureNode(Node):
 
                 # Build positions_3d dict for tracking
                 positions_3d = {
-                    i: (pos.position_camera.x, pos.position_camera.y, pos.position_camera.z)
+                    i: pos.position_3d
                     for i, pos in enumerate(person_positions) if pos
                 }
 
@@ -583,6 +607,14 @@ class PhotoCaptureNode(Node):
         else:
             logger.debug("invalid_activation_message", received=msg.data)
 
+    def _photo_trigger_callback(self, msg: String) -> None:  # ← ADD THIS
+        """Callback for photo trigger message"""
+        if msg.data == 'trigger':
+            logger.info("photo_trigger_received")
+            self.state_machine.trigger_activation()
+        else:
+            logger.debug("invalid_photo_trigger_message", received=msg.data)
+
     async def main_control_loop(self) -> None:
         """Main control loop --> timer callback (5Hz)"""
         try:
@@ -598,8 +630,11 @@ class PhotoCaptureNode(Node):
                 current_time=time.time()
             )
 
+            # if actions:
+            #     logger.info(f"STATE_MACHINE_RETURNED_ACTIONS: {actions}")
+
             #execute actions
-            self._execute_actions(actions)
+            await self._execute_actions(actions)
 
             #publish status
             self._publish_status()
@@ -607,10 +642,12 @@ class PhotoCaptureNode(Node):
         except Exception as e:
             logger.error("main_control_loop_error", error=str(e))
 
-    def _execute_actions(self, actions: Dict[str, Any]) -> None:
+    async def _execute_actions(self, actions: Dict[str, Any]) -> None:
         """"Execute actions returned by state machine"""
         if not actions:
             return
+
+        # logger.debug(f"EXECUTING_ACTIONS: {actions.keys()}")
 
         #voice output --> for TTS
         if 'speak' in actions and actions['speak']:
@@ -621,17 +658,33 @@ class PhotoCaptureNode(Node):
 
         # camera movement
         if 'gimbal_target' in actions:
-            self.camera_controller.move_gimbal_to(
-                actions['gimbal_target'],
-                move_time=actions.get('gimbal_time', 1.0)
-            )
+            try:
+                # logger.info(f"🎯 GIMBAL_TARGET_FOUND: {actions['gimbal_target']}")
+                gimbal_tuple = actions['gimbal_target']
+                gimbal_target = GimbalTarget(
+                    yaw=gimbal_tuple[0],
+                    pitch=gimbal_tuple[1],
+                    roll=gimbal_tuple[2],
+                    move_time=actions.get('gimbal_time', 1.0),
+                    priority=1
+                )
+                # logger.info(f"🎯 CALLING_MOVE_GIMBAL_TO: yaw={gimbal_target.yaw}, pitch={gimbal_target.pitch}")
+                # Execute async - don't wait for completion
+                await self.camera_controller.move_gimbal_to(gimbal_target, wait_for_completion=False)
+                # logger.info("🎯 GIMBAL_COMMAND_SENT")
+            except Exception as e:
+                logger.error(f"❌ GIMBAL_EXECUTION_ERROR: {e}")
 
         # focus adjustment
         if 'focus_position' in actions:
-            msg = Int32()
-            msg.data = actions['focus_position']
-            self.focus_cmd_pub.publish(msg)
-            logger.debug("focus_position_message_sent", message=actions['focus_position'])
+            try:
+                # logger.info(f"📷 FOCUS_POSITION_FOUND: {actions['focus_position']}")
+                msg = Int32()
+                msg.data = actions['focus_position']
+                self.focus_cmd_pub.publish(msg)
+                # logger.info(f"📷 FOCUS_PUBLISHED: {msg.data}")
+            except Exception as e:
+                logger.error(f"❌ FOCUS_EXECUTION_ERROR: {e}")
 
         # photo capture
         if 'capture_photo' in actions and actions['capture_photo']:
@@ -710,7 +763,8 @@ class PhotoCaptureNode(Node):
         """"""
         try:
             if hasattr(self, 'cleanup'):
-                asyncio.run(self.cleanup())
+                # asyncio.run(self.cleanup())
+                logger.info("skipping_async_cleanup_in_destroy")
         except  Exception as e:
             logger.warning("cleanup_during_destroy_node_failed", error=str(e))
 

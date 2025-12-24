@@ -314,9 +314,9 @@ class SceneClassifier:
 
         #centroid calculation
         centroid = (
-            np.mean(p[0] for p in pos_3d), # X --> horizontal
-            np.mean(p[1] for p in pos_3d), # Y --> vertical
-            np.mean(p[2] for p in pos_3d)  # Z --> depth - in to the scene
+            np.mean([p[0] for p in pos_3d]), # X --> horizontal
+            np.mean([p[1] for p in pos_3d]), # Y --> vertical
+            np.mean([p[2] for p in pos_3d])  # Z --> depth - in to the scene
         )
 
         # horizontal spread X -axis

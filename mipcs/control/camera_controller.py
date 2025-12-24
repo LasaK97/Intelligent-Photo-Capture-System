@@ -11,7 +11,8 @@ from enum import Enum, auto
 import rclpy
 from rclpy.node import Node
 from rclpy.action import ActionClient
-from std_msgs.msg import Float64MultiArray, Int32
+from std_msgs.msg import Int32
+from dji_rs3pro_ros_controller.msg import GimbalCmd
 from sensor_msgs.msg import JointState
 from control_msgs.action import FollowJointTrajectory
 from trajectory_msgs.msg import JointTrajectoryPoint
@@ -112,8 +113,8 @@ class CameraController:
         elif self.control_method == 'direct':
             #direct command publisher
             self.gimbal_cmd_pub = self.node.create_publisher(
-                Float64MultiArray,
-                f'/{self.config.gimbal.controller_name}/commands',
+                GimbalCmd,
+                self.settings.ros2_topics.gimbal_commands,
                 10
             )
         else:
@@ -235,16 +236,32 @@ class CameraController:
 
     def _validate_gimbal_target(self, target: GimbalTarget) -> GimbalTarget:
         """Validate and clamp target to gimbal limits"""
-        limits = self.config.gimbal.limits
+        # Get limits from shared hardware specs
+        try:
+            gimbal_limits = self.settings.shared.hardware.gimbal.limits
+            yaw_min = gimbal_limits.yaw.min
+            yaw_max = gimbal_limits.yaw.max
+            pitch_min = gimbal_limits.pitch.min
+            pitch_max = gimbal_limits.pitch.max
+            roll_min = gimbal_limits.roll.min
+            roll_max = gimbal_limits.roll.max
+        except (AttributeError, KeyError) as e:
+            logger.warning(f"gimbal_limits_not_found_using_defaults: {e}")
+            # Fallback defaults (radians)
+            yaw_min, yaw_max = -1.57, 1.57  # ±90°
+            pitch_min, pitch_max = -0.785, 0.785  # ±45°
+            roll_min, roll_max = 0.0, 0.0  # No roll
 
-        #clamp to joint limits
-        yaw = np.clip(target.yaw, limits.yaw_range[0], limits.yaw_range[1])
-        pitch = np.clip(target.pitch, limits.pitch_range[0], limits.pitch_range[1])
-        roll = np.clip(target.roll, limits.roll_range[0], limits.roll_range[1])
+        # clamp to joint limits
+        yaw = np.clip(target.yaw, yaw_min, yaw_max)
+        pitch = np.clip(target.pitch, pitch_min, pitch_max)
+        roll = np.clip(target.roll, roll_min, roll_max)
 
-        #log if clamping occurs
+        # log if clamping occurs
         if yaw != target.yaw or pitch != target.pitch or roll != target.roll:
-            logger.warning("gimbal_target_clamped", original_yaw=target.yaw, clamped_yaw=yaw, original_pitch=target.pitch, clamped_pitch=pitch)
+            logger.warning("gimbal_target_clamped",
+                           original_yaw=target.yaw, clamped_yaw=yaw,
+                           original_pitch=target.pitch, clamped_pitch=pitch)
 
         return GimbalTarget(
             yaw=yaw,
@@ -292,17 +309,41 @@ class CameraController:
 
     async def _move_via_direct(self, target: GimbalTarget) -> bool:
         """Execute movement with direct commands"""
+        # logger.info(f"🔧 _move_via_direct CALLED: yaw={target.yaw}, pitch={target.pitch}")
+
         if not hasattr(self, 'gimbal_cmd_pub'):
+            logger.error("❌ gimbal_cmd_pub NOT FOUND")
             raise ControlError("Gimbal command publisher not initialized")
 
-        #create command message
-        cmd_msg = Float64MultiArray()
-        cmd_msg.data = [target.yaw, target.pitch, target.roll]
+        # logger.info(f"✅ gimbal_cmd_pub EXISTS")
 
-        #publsih command message
-        self.gimbal_cmd_pub.publish(cmd_msg)
+        # Create GimbalCmd message with 6-joint array
+        cmd_msg = GimbalCmd()
+        cmd_msg.current = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        cmd_msg.accel = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+        cmd_msg.vel = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
-        logger.debug("sending_gimbal_command_sent", target=target)
+        # Map to correct joints: [0, pan/yaw, roll, tilt/pitch, 0, 0]
+        cmd_msg.angle = [
+            0.0,  # Joint 0 (arm)
+            target.yaw,  # Joint 1 (pan/yaw)
+            target.roll,  # Joint 2 (roll)
+            target.pitch,  # Joint 3 (tilt/pitch)
+            0.0,  # Joint 4 (arm)
+            0.0  # Joint 5 (arm)
+        ]
+        cmd_msg.msg_ctr = 0  # Message counter
+
+        # logger.info(f"📦 GimbalCmd created: angle={cmd_msg.angle}")
+
+        # Publish command message
+        try:
+            self.gimbal_cmd_pub.publish(cmd_msg)
+            # logger.info(f"✅ GimbalCmd PUBLISHED to /gimbalCmd")
+        except Exception as e:
+            logger.error(f"❌ PUBLISH FAILED: {e}")
+            raise
+
         return True
 
     async def _wait_for_movement_completion(
@@ -426,15 +467,7 @@ class CameraController:
         logger.info("camera_controller_stopped")
 
     async def execute_trajectory(self, trajectory: Dict) -> bool:
-        """
-        Execute motion planner trajectory.
-
-        Args:
-            trajectory: Dict with 'waypoints', 'duration', 'smoothness'
-
-        Returns:
-            True if successful, False otherwise
-        """
+        """execute motion planner trajectory."""
         waypoints = trajectory.get('waypoints', [])
 
         if not waypoints:
