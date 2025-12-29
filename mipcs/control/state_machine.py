@@ -178,25 +178,33 @@ class PhotoStateMachine:
         return None
 
     def _handle_initializing(self) -> Optional[StateAction]:
-        """handle initializing state -- setup gimbal and focus"""
-
+        """Handle initializing state with zoom home calibration."""
         time_in_state = self.time_in_state()
 
         if time_in_state < 0.5:
-            #initial setup
+            # Phase 1: Home position calibration (gimbal + zoom to 0)
+            logger.info("Initialization: Moving to home position (24mm)")
             return StateAction(
-                speak=self.voice_mapper.get_message("welcome"),
+                speak="Initializing camera system",
                 gimbal_target=(0.0, 0.0, 0.0),
                 gimbal_time=2.0,
-                focus_position=0  # Start at wide angle (0-4095 range)
-
+                focus_position=0  # 24mm home position for calibration
             )
-        elif time_in_state > 3.0:
-            #init complete
+
+        elif time_in_state < 2.5:
+            # Phase 2: Move to working zoom position (50mm)
+            logger.info("Initialization: Setting working zoom (50mm)")
+            return StateAction(
+                focus_position=1800  # 50mm working position
+            )
+
+        elif time_in_state > 4.0:
+            # Phase 3: Initialization complete
             self._transition_to(PhotoState.DETECTING, "initialization_complete")
             return StateAction(
                 speak=self.voice_mapper.get_message("welcome")
             )
+
         return None
 
 
