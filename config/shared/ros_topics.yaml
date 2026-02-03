@@ -27,8 +27,8 @@ output_topics:
   focus_commands: "/set_focus_position"
   capture_trigger: "/capture_image_topic"
 
-  # User feedback
-  tts_output: "/tts_text_output"
+  # Voice guidance (audio_id for pre-generated audio)
+  photo_guidance: "/va_photo_guidance"
 
 status_topics:
   # System monitoring

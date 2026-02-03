@@ -140,6 +140,32 @@ focus:
     min: 0
     max: 4095
 
+  # IMPORTANT: FM03 motor controls ZOOM, not focus
+  # Camera autofocus handles actual focusing
+  # "focus" is legacy naming from original config
+
+  # Zoom motor control
+  zoom_control:
+    # Motor position → Focal length mapping
+    # NOTE: These are estimates - need calibration from Experiment 2
+    reference_positions:
+      24: 0     # Home position (physical stop at 24mm wide)
+      35: 900   # Wide angle (estimated)
+      50: 1800  # Working/default position (estimated)
+      70: 2700  # Portrait telephoto (estimated)
+      85: 3200  # Tight portrait (estimated)
+      105: 4095  # Maximum zoom (physical stop)
+
+    # Default positions for initialization
+    home_position: 0      # 24mm - Used for calibration reference
+    default_position: 1800  # 50mm - Working position after init
+
+    # Movement timing (conservative estimates until Experiment 2)
+    timing:
+      full_range_time: 3.0    # seconds for 0→4095 (24mm→105mm)
+      settling_time: 0.5       # seconds to wait after movement
+      position_tolerance: 50   # acceptable error in position units
+
   # Focal parameters
   default_focal_length: 50.0  # mm
   hyperfocal_distance: 15.0  # meters (for 50mm f/4)

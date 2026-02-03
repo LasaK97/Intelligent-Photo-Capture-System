@@ -241,9 +241,9 @@ class PhotoCaptureNode(Node):
             10
         )
 
-        self.tts_pub = self.create_publisher(
+        self.photo_guidance_pub = self.create_publisher(
             String,
-            self.settings.ros2_topics.tts_output,
+            self.settings.ros2_topics.photo_guidance,
             10
         )
 
@@ -649,12 +649,18 @@ class PhotoCaptureNode(Node):
 
         # logger.debug(f"EXECUTING_ACTIONS: {actions.keys()}")
 
-        #voice output --> for TTS
+        # Voice output --> publish audio_id for pre-generated audio
         if 'speak' in actions and actions['speak']:
-            msg = String()
-            msg.data = actions['speak']
-            self.tts_pub.publish(msg)
-            logger.debug("tts_message_sent", message=actions['speak'])
+            action_key = actions['speak']
+            audio_id = self.voice_mapper.get_audio_id(action_key)
+
+            if audio_id:
+                msg = String()
+                msg.data = audio_id
+                self.photo_guidance_pub.publish(msg)
+                logger.debug("photo_guidance_sent", action_key=action_key, audio_id=audio_id)
+            else:
+                logger.warning("no_audio_id_for_speak_action", action_key=action_key)
 
         # camera movement
         if 'gimbal_target' in actions:

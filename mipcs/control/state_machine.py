@@ -55,7 +55,7 @@ class StateContext:
 @dataclass
 class StateAction:
     """actions data for the state machine"""
-    speak: Optional[str] = None  # TTS message
+    speak: Optional[str] = None  # action_key for audio_id (e.g., "move_closer")
     gimbal_target: Optional[tuple] = None  # (yaw, pitch, roll)
     gimbal_time: float = 1.0  # Movement time
     focus_position: Optional[int] = None  # Focus motor position
@@ -185,7 +185,7 @@ class PhotoStateMachine:
         if time_in_state < 0.5:
             #initial setup
             return StateAction(
-                speak=self.voice_mapper.get_message("welcome"),
+                speak="welcome",
                 gimbal_target=(0.0, 0.0, 0.0),
                 gimbal_time=2.0,
                 focus_position=0  # Start at wide angle (0-4095 range)
@@ -195,7 +195,7 @@ class PhotoStateMachine:
             #init complete
             self._transition_to(PhotoState.DETECTING, "initialization_complete")
             return StateAction(
-                speak=self.voice_mapper.get_message("welcome")
+                speak="welcome"
             )
         return None
 
@@ -221,22 +221,20 @@ class PhotoStateMachine:
                 self._transition_to(PhotoState.POSITIONING, f"detected_{person_count}_people")
 
                 if scene_type == SceneType.PORTRAIT:
-                    message = self.voice_mapper.get_message("single_person_detected")
+                    action_key = "single_person_detected"
                 elif scene_type == SceneType.COUPLE:
-                    message = self.voice_mapper.get_message("couple_detected")
-                elif person_count <= 4:
-                    message = f"Wonderful! I can see your group of {person_count}"
+                    action_key = "couple_detected"
                 else:
-                    message = self.voice_mapper.get_message("group_detected")
+                    action_key = "group_detected"
 
-                return StateAction(speak=message)
+                return StateAction(speak=action_key)
         else:
             #no people detected
             self.context.stable_detection_start = None
 
             #ecourange people to come in front
             if time_in_state > 5.0 and int(time_in_state) % 3 == 0:
-                return StateAction(speak=self.voice_mapper.get_message("welcome"))
+                return StateAction(speak="welcome")
 
         return None
 
@@ -250,7 +248,7 @@ class PhotoStateMachine:
         person_count = len(self.context.person_positions or [])
         if person_count == 0:
             self._transition_to(PhotoState.DETECTING, "people_disappeared")
-            return StateAction(speak=self.voice_mapper.get_message("welcome"))
+            return StateAction(speak="welcome")
 
         #basic scene analysis
         scene_analysis = self._analyze_basic_scene(self.context.person_positions)
@@ -258,7 +256,7 @@ class PhotoStateMachine:
         #check positioning
         if scene_analysis.composition_quality in [CompositionQuality.EXCELLENT, CompositionQuality.GOOD, CompositionQuality.FAIR, CompositionQuality.POOR, CompositionQuality.UNACCEPTABLE]:
             self._transition_to(PhotoState.ADJUSTING_CAMERA, "good_composition_achieved")
-            return StateAction(speak=self.voice_mapper.get_message("perfect_position"))
+            return StateAction(speak="perfect_position")
 
         #guide
         time_since_guidance = current_time - self.context.last_guidance_time
@@ -266,11 +264,10 @@ class PhotoStateMachine:
 
             action_keys = scene_analysis.recommended_action_keys
             if action_keys:
-                messages = self.voice_mapper.get_messages_for_actions(action_keys)
-                if messages:
-                    self.context.last_guidance_time = current_time
-                    self.context.guidance_attempts += 1
-                    return StateAction(speak=messages[0])
+                self.context.last_guidance_time = current_time
+                self.context.guidance_attempts += 1
+                # Pass the action_key directly (node will convert to audio_id)
+                return StateAction(speak=action_keys[0])
 
         return None
 
@@ -298,7 +295,7 @@ class PhotoStateMachine:
                 focus_position = self._calculate_basic_focus(avg_distance)
 
                 return StateAction(
-                    speak=self.voice_mapper.get_message("perfect_position"),
+                    speak="perfect_position",
                     gimbal_target=(yaw_adjustment, pitch_adjustment, 0.0),
                     gimbal_time=2.0,
                     focus_position=focus_position
@@ -319,12 +316,12 @@ class PhotoStateMachine:
         person_count = len(self.context.person_positions or [])
         if person_count == 0:
             self._transition_to(PhotoState.DETECTING, "people_disappeared_during_verification")
-            return StateAction(speak=self.voice_mapper.get_message("welcome"))
+            return StateAction(speak="welcome")
 
         #check if people all are still positioned
         if time_in_state > 2.0:
             self._transition_to(PhotoState.COUNTDOWN, "verification_passed")
-            return StateAction(speak="Perfect! Get ready...")
+            return StateAction(speak="countdown_start")
 
         return None
 
@@ -340,17 +337,17 @@ class PhotoStateMachine:
 
         if countdown_number > countdown_duration:
             # just started countdown
-            return StateAction(speak=f"Photo in {countdown_duration}")
+            return StateAction(speak="countdown_start")
 
         elif countdown_number > 0 and remaining_time > 0.5:
-            #count down
-            return StateAction(speak=str(countdown_number))
+            #count down - use action_key format "countdown_3", "countdown_2", "countdown_1"
+            return StateAction(speak=f"countdown_{countdown_number}")
 
         elif remaining_time <= 0:
             #take photo
             self._transition_to(PhotoState.CAPTURING, "countdown_complete")
             return StateAction(
-                speak="Say cheese!",
+                speak="countdown_1",
                 capture_photo=True
             )
 
@@ -366,7 +363,7 @@ class PhotoStateMachine:
             #photo capture complete
             self.context.photos_captured += 1
             self._transition_to(PhotoState.COMPLETE, "photo_captured")
-            return StateAction(speak=self.voice_mapper.get_message("capture_complete"))
+            return StateAction(speak="capture_complete")
 
         return None
 
@@ -388,8 +385,7 @@ class PhotoStateMachine:
         time_in_state = self.time_in_state()
 
         if time_in_state < 0.5:
-            error_message = "I'm having trouble. Let me try again..."
-            return StateAction(speak=error_message)
+            return StateAction(speak="timeout_warning")
 
         elif time_in_state > 3.0:
             #try to recover
@@ -404,7 +400,7 @@ class PhotoStateMachine:
         time_in_state = self.time_in_state()
 
         if time_in_state < 0.5:
-            return StateAction(speak=self.voice_mapper.get_message("timeout_warning"))
+            return StateAction(speak="timeout_warning")
 
         elif time_in_state > 2.0:
             # return --> detecting
